@@ -1,6 +1,7 @@
 import type { Viewport } from "next";
 import { Suspense } from "react";
 import { Sidebar } from "./components/Sidebar";
+import { RouteGuard } from "./components/RouteGuard";
 
 // viewport-fit=cover lets the tab bar and top bar use the iPhone safe-area insets.
 // Zoom is never disabled; inputs are 16px on touch devices instead.
@@ -17,7 +18,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="ps-shell">
       <Sidebar />
       <main className="ps-main">
-        <Suspense>{children}</Suspense>
+        <Suspense>
+          <RouteGuard>{children}</RouteGuard>
+        </Suspense>
       </main>
     </div>
   );

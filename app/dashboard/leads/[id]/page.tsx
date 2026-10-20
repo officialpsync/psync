@@ -696,7 +696,7 @@ export default function LeadDetailPage() {
                 <div className="ps-label" style={{ marginBottom: 5 }}>Lead owner</div>
                 <select className="ps-input" value={lead.assigned_to ?? ""} onChange={(e) => handleAssign(e.target.value)} disabled={savingAssign} style={{ height: 36, fontSize: 13.5 }}>
                   <option value="">Unassigned</option>
-                  {staff.map((s) => <option key={s.user_id} value={s.user_id}>{s.name}</option>)}
+                  {staff.map((s) => <option key={s.id} value={s.user_id}>{s.name}</option>)}
                 </select>
               </div>
             </div>

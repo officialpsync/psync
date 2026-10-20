@@ -102,7 +102,19 @@ export function useRole(): RoleData {
         .single()
 
       if (!row) {
-        setData({ ...LOADING, loading: false })
+        // No user_roles row found — fail closed (no access), never default to owner.
+        setData({
+          user_id: user.id,
+          org_id: "",
+          branch_id: "",
+          staff_role: "general_staff",
+          permissions: {
+            members: false, attendance: false, classes: false, workouts: false,
+            diet: false, recipes: false, leads: false, payments: false,
+            membership_plans: false, reports: false, settings: false,
+          },
+          loading: false,
+        })
         return
       }
 

@@ -14,6 +14,7 @@ import {
 import { formatINR, Skeleton, Avatar } from "./components/ui";
 import { Sheet } from "./components/Sheet";
 import { DesignStyles } from "./components/DesignSystem";
+import { useRole } from "./components/useRole";
 
 /* ───────────────────────── Types ───────────────────────── */
 
@@ -202,6 +203,12 @@ function ChartTip({ active, payload, label, money }: { active?: boolean; payload
 /* ───────────────────────── Page ───────────────────────── */
 
 export default function DashboardPage() {
+  const roleData = useRole();
+  // Default to "nothing visible" while role is still resolving, so a staff
+  // member never sees a flash of owner-level widgets before permissions load.
+  const perm = roleData.loading ? null : roleData.permissions;
+  const isManager = !roleData.loading && (roleData.staff_role === "owner" || roleData.staff_role === "manager");
+
   const [stats, setStats] = useState<Stats | null>(null);
   const [revenue, setRevenue] = useState<Point[]>([]);
   const [week, setWeek] = useState<Point[]>([]);
@@ -345,16 +352,71 @@ export default function DashboardPage() {
     { label: "Connect Razorpay for online payments", done: false, href: "/dashboard/settings" },
   ];
   const doneCount = checklistItems.filter((c) => c.done).length;
-  const showSetup = layout.setup && stats !== null && doneCount < checklistItems.length;
+  // Setup checklist is an owner/manager concern (Razorpay, branches, plans) — never shown to other roles.
+  const showSetup = isManager && layout.setup && stats !== null && doneCount < checklistItems.length;
 
   const turnout = stats && stats.activeMembers > 0 ? Math.min(100, (stats.checkinsToday / stats.activeMembers) * 100) : 0;
   const revenueTotal6m = useMemo(() => revenue.reduce((s, p) => s + p.value, 0), [revenue]);
   const weekTotal = useMemo(() => week.reduce((s, p) => s + p.value, 0), [week]);
-  const hiddenCount = WIDGETS.filter((w) => !layout[w.id]).length;
 
-  const showRow2 = layout.revenue || layout.today;
-  const showRow3 = layout.checkins || layout.expiring || layout.payments;
-  const showRow4 = layout.actions || layout.classes || layout.activity;
+  // Each widget's permission requirement. true = every role may see it (classes has no dedicated gate here beyond its own permission).
+  const canSee: Record<WidgetId, boolean> = {
+    kpis: true, // the row itself is a container; individual cards below gate themselves
+    revenue: !!perm?.reports,
+    today: !!perm?.attendance,
+    checkins: !!perm?.attendance,
+    expiring: !!perm?.membership_plans,
+    payments: !!perm?.payments,
+    classes: !!perm?.classes,
+    activity: !!perm?.attendance,
+    actions: true, // filtered item-by-item below
+    setup: isManager,
+  };
+
+  const effective: Record<WidgetId, boolean> = Object.fromEntries(
+    WIDGETS.map((w) => [w.id, layout[w.id] && canSee[w.id]])
+  ) as Record<WidgetId, boolean>;
+
+  const FLOW: React.CSSProperties = { gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" };
+  const hiddenCount = WIDGETS.filter((w) => !effective[w.id]).length;
+
+  const showRow2 = effective.revenue;
+  const todayInRow3 = !effective.revenue && effective.today;
+  const showRow3 = todayInRow3 || effective.checkins || effective.expiring || effective.payments;
+  const visibleActions = QUICK_ACTIONS.filter((a) => {
+    if (a.href.includes("/members")) return !!perm?.members;
+    if (a.href.includes("/payments")) return !!perm?.payments;
+    if (a.href.includes("/attendance")) return !!perm?.attendance;
+    if (a.href.includes("/reports")) return !!perm?.reports;
+    return true;
+  });
+  const showRow4 = effective.actions && visibleActions.length > 0 || effective.classes || effective.activity;
+
+
+  const renderToday = (cls: string) => (
+    <section className={`db-hero ${cls}`} aria-label="Today's check-ins"
+            >
+              <div className="db-hero-glow" aria-hidden />
+              <div className="db-hero-top">
+                <span className="db-hero-label"><Activity size={14} /> Today</span>
+                <span className="db-live"><span className="db-live-dot" />Live</span>
+              </div>
+              <div className="db-hero-body">
+                <Ring pct={turnout} />
+                <div style={{ minWidth: 0 }}>
+                  <div className="db-hero-value">{stats ? stats.checkinsToday : "–"}</div>
+                  <div className="db-hero-sub">
+                    {!stats ? "\u00a0" : stats.activeMembers > 0
+                      ? `check-ins of ${stats.activeMembers} active member${stats.activeMembers === 1 ? "" : "s"}`
+                      : "No active members yet"}
+                  </div>
+                </div>
+              </div>
+              <Link href="/dashboard/attendance" className="db-hero-btn">
+                <UserCheck size={15} strokeWidth={2.4} /> Check someone in
+              </Link>
+            </section>
+  );
 
   return (
     <div className="ps-page db">
@@ -381,7 +443,7 @@ export default function DashboardPage() {
       </header>
 
       {/* Expiring banner (urgent, always on top when relevant) */}
-      {stats && stats.expiringThisWeek > 0 && (
+      {stats && stats.expiringThisWeek > 0 && canSee.expiring && (
         <Link href="/dashboard/members?filter=expiring" className="db-banner db-in">
           <span className="db-banner-icon"><AlertTriangle size={17} strokeWidth={2.3} /></span>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -392,38 +454,46 @@ export default function DashboardPage() {
         </Link>
       )}
 
-      {/* KPI row */}
-      {layout.kpis && (
-        <div className="db-kpis">
-          <Kpi
-            tone="blue" icon={IndianRupee} label="Revenue this month" href="/dashboard/payments"
-            value={stats ? formatINR(stats.revenueThisMonth) : <Skeleton w={110} h={30} />}
-            foot={stats ? <><Trend value={stats.revenueChange} /> <span>vs last month</span></> : "\u00a0"}
-            spark={{ data: revenue, color: "#0071e3" }}
-          />
-          <Kpi
-            tone="green" icon={Users} label="Active members" href="/dashboard/members?filter=active"
-            value={stats ? stats.activeMembers : <Skeleton w={50} h={30} />}
-            foot={stats ? <><Trend value={stats.activeChange} /> <span>vs last month</span></> : "\u00a0"}
-          />
-          <Kpi
-            tone="purple" icon={UserPlus} label="New this month" href="/dashboard/members"
-            value={stats ? stats.newMembersThisMonth : <Skeleton w={50} h={30} />}
-            foot={stats ? <span>{stats.openLeads} open lead{stats.openLeads === 1 ? "" : "s"} in pipeline</span> : "\u00a0"}
-          />
-          <Kpi
-            tone="amber" icon={Clock} label="Renewals due" href="/dashboard/members?filter=expiring"
-            value={stats ? stats.expiringThisWeek : <Skeleton w={50} h={30} />}
-            foot={<span>Next 7 days</span>}
-          />
+      {/* KPI row — each card gated by the permission it actually exposes */}
+      {effective.kpis && (!!perm?.reports || !!perm?.members || !!perm?.membership_plans) && (
+        <div className="db-kpis" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))" }}>
+          {perm?.reports && (
+            <Kpi
+              tone="blue" icon={IndianRupee} label="Revenue this month" href="/dashboard/payments"
+              value={stats ? formatINR(stats.revenueThisMonth) : <Skeleton w={110} h={30} />}
+              foot={stats ? <><Trend value={stats.revenueChange} /> <span>vs last month</span></> : "\u00a0"}
+              spark={{ data: revenue, color: "#0071e3" }}
+            />
+          )}
+          {perm?.members && (
+            <Kpi
+              tone="green" icon={Users} label="Active members" href="/dashboard/members?filter=active"
+              value={stats ? stats.activeMembers : <Skeleton w={50} h={30} />}
+              foot={stats ? <><Trend value={stats.activeChange} /> <span>vs last month</span></> : "\u00a0"}
+            />
+          )}
+          {perm?.members && (
+            <Kpi
+              tone="purple" icon={UserPlus} label="New this month" href="/dashboard/members"
+              value={stats ? stats.newMembersThisMonth : <Skeleton w={50} h={30} />}
+              foot={stats ? <span>{stats.openLeads} open lead{stats.openLeads === 1 ? "" : "s"} in pipeline</span> : "\u00a0"}
+            />
+          )}
+          {perm?.membership_plans && (
+            <Kpi
+              tone="amber" icon={Clock} label="Renewals due" href="/dashboard/members?filter=expiring"
+              value={stats ? stats.expiringThisWeek : <Skeleton w={50} h={30} />}
+              foot={<span>Next 7 days</span>}
+            />
+          )}
         </div>
       )}
 
       {/* Revenue chart + Today */}
       {showRow2 && (
         <div className="db-grid">
-          {layout.revenue && (
-            <section className={`db-card db-pad ${layout.today ? "db-span-8" : "db-span-12"}`}>
+          {effective.revenue && (
+            <section className={`db-card db-pad ${effective.today ? "db-span-8" : "db-span-12"}`}>
               <CardHead title="Revenue" sub={revenue.length ? `${formatINR(revenueTotal6m)} collected in the last 6 months` : "Last 6 months"} href="/dashboard/reports" cta="Reports" />
               <div className="db-chart">
                 {revenue.length === 0 ? <Skeleton w="100%" h={220} r={12} /> : (
@@ -448,37 +518,16 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {layout.today && (
-            <section className={`db-hero ${layout.revenue ? "db-span-4" : "db-span-12"}`} aria-label="Today's check-ins">
-              <div className="db-hero-glow" aria-hidden />
-              <div className="db-hero-top">
-                <span className="db-hero-label"><Activity size={14} /> Today</span>
-                <span className="db-live"><span className="db-live-dot" />Live</span>
-              </div>
-              <div className="db-hero-body">
-                <Ring pct={turnout} />
-                <div style={{ minWidth: 0 }}>
-                  <div className="db-hero-value">{stats ? stats.checkinsToday : "–"}</div>
-                  <div className="db-hero-sub">
-                    {!stats ? "\u00a0" : stats.activeMembers > 0
-                      ? `check-ins of ${stats.activeMembers} active member${stats.activeMembers === 1 ? "" : "s"}`
-                      : "No active members yet"}
-                  </div>
-                </div>
-              </div>
-              <Link href="/dashboard/attendance" className="db-hero-btn">
-                <UserCheck size={15} strokeWidth={2.4} /> Check someone in
-              </Link>
-            </section>
-          )}
+          {effective.today && renderToday("db-span-4")}
         </div>
       )}
 
       {/* Weekly check-ins + expiring + payments */}
       {showRow3 && (
-        <div className="db-grid">
-          {layout.checkins && (
-            <section className="db-card db-pad db-span-4">
+        <div className="db-grid" style={FLOW}>
+          {todayInRow3 && renderToday("")}
+          {effective.checkins && (
+            <section className="db-card db-pad">
               <CardHead title="Check-ins" sub={week.length ? `${weekTotal} visits in the last 7 days` : "Last 7 days"} href="/dashboard/attendance" />
               <div className="db-chart db-chart--sm">
                 {week.length === 0 ? <Skeleton w="100%" h={180} r={12} /> : (
@@ -498,8 +547,8 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {layout.expiring && (
-            <section className="db-card db-pad db-span-4">
+          {effective.expiring && (
+            <section className="db-card db-pad">
               <CardHead title="Expiring soon" sub="Renewals due in 7 days" href="/dashboard/members?filter=expiring" />
               {expiring === null ? <RowsSkeleton /> : expiring.length === 0 ? (
                 <Empty icon={Check} title="All caught up" text="No memberships expire in the next 7 days." />
@@ -525,8 +574,8 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {layout.payments && (
-            <section className="db-card db-pad db-span-4">
+          {effective.payments && (
+            <section className="db-card db-pad">
               <CardHead title="Recent payments" sub="Latest transactions" href="/dashboard/payments" />
               {payments === null ? <RowsSkeleton /> : payments.length === 0 ? (
                 <Empty icon={Wallet} title="No payments yet" text="Recorded payments will show up here." />
@@ -551,12 +600,12 @@ export default function DashboardPage() {
 
       {/* Quick actions + classes + activity */}
       {showRow4 && (
-        <div className="db-grid">
-          {layout.actions && (
-            <section className="db-span-4 db-actions-wrap">
+        <div className="db-grid" style={FLOW}>
+          {effective.actions && visibleActions.length > 0 && (
+            <section className="db-actions-wrap">
               <h2 className="db-section-title">Quick actions</h2>
               <div className="db-actions">
-                {QUICK_ACTIONS.map((a) => (
+                {visibleActions.map((a) => (
                   <Link key={a.label} href={a.href} className={`db-action db-tone-${a.tone}`}>
                     <span className="db-chip db-chip--lg"><a.icon size={18} strokeWidth={2.2} /></span>
                     <div style={{ minWidth: 0 }}>
@@ -569,8 +618,8 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {layout.classes && (
-            <section className="db-card db-pad db-span-4">
+          {effective.classes && (
+            <section className="db-card db-pad">
               <CardHead title="Today's classes" sub={todayName || "\u00a0"} href="/dashboard/classes" />
               {classes === null ? <RowsSkeleton n={3} /> : classes.length === 0 ? (
                 <Empty icon={CalendarDays} title="No classes today" text="Scheduled classes for today will appear here." />
@@ -591,8 +640,8 @@ export default function DashboardPage() {
             </section>
           )}
 
-          {layout.activity && (
-            <section className="db-card db-pad db-span-4">
+          {effective.activity && (
+            <section className="db-card db-pad">
               <CardHead title="Live activity" sub="Recent check-ins" href="/dashboard/attendance" />
               {visits === null ? <RowsSkeleton /> : visits.length === 0 ? (
                 <Empty icon={Activity} title="No visits yet" text="Check-ins will stream in here as members arrive." />
@@ -646,7 +695,7 @@ export default function DashboardPage() {
       )}
 
       {/* Empty state when everything is hidden */}
-      {hiddenCount === WIDGETS.length && (
+      {hiddenCount === WIDGETS.filter((w) => canSee[w.id]).length && (
         <div className="db-card db-pad">
           <Empty icon={SlidersHorizontal} title="Your dashboard is empty" text="Turn widgets back on from Customize." />
         </div>
@@ -666,7 +715,7 @@ export default function DashboardPage() {
         }
       >
         <div className="db-toggles">
-          {WIDGETS.map((w) => (
+          {WIDGETS.filter((w) => canSee[w.id]).map((w) => (
             <label key={w.id} className="db-toggle">
               <div style={{ minWidth: 0 }}>
                 <div className="db-toggle-title">{w.label}</div>

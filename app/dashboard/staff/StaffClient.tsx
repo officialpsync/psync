@@ -19,6 +19,8 @@ type Staff = {
   role: StaffRole
   permissions: Permissions
   is_active: boolean
+  user_id: string | null
+  invite_status: "not_invited" | "invited" | "active"
 }
 
 const ROLES: { value: StaffRole; label: string }[] = [
@@ -83,6 +85,7 @@ export default function StaffClient() {
   const [editing, setEditing] = useState<Staff | null>(null)
   const [form, setForm] = useState(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [inviting, setInviting] = useState(false)
 
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all")
@@ -170,6 +173,31 @@ export default function StaffClient() {
     fetchStaff()   // refetch directly; flipping `fetched` alone never re-ran the effect
   }
 
+  async function handleInvite(s: Staff) {
+    if (!s.email) { show("Add an email first", "error"); return }
+    setInviting(true)
+    try {
+      const res = await fetch("/api/staff/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ staff_id: s.id }),
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        show(body.error ?? "Failed to send invite", "error")
+        return
+      }
+      show(`Invite sent to ${s.email}`, "success")
+      fetchStaff()
+      setSheetOpen(false)
+    } catch (err) {
+      console.error("Invite error:", err)
+      show("Failed to send invite", "error")
+    } finally {
+      setInviting(false)
+    }
+  }
+
   const loading = !fetched && (roleData.loading || fetching)
   const activeCount = staff.filter((s) => s.is_active).length
   const inactiveCount = staff.length - activeCount
@@ -220,40 +248,26 @@ export default function StaffClient() {
         </div>
       </header>
 
-      {fetched && staff.length > 0 && (
-        <div className="db-card db-toolbar">
-          <label className="db-search">
-            <Search size={16} />
-            <input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by name, email or phone"
-              aria-label="Search staff"
-            />
-          </label>
-          <div className="db-presets" role="group" aria-label="Filter by status">
-            {([
-              { value: "all" as const, label: "All" },
-              { value: "active" as const, label: "Active" },
-              { value: "inactive" as const, label: "Inactive" },
-            ]).map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                className="db-preset"
-                aria-pressed={statusFilter === opt.value}
-                onClick={() => setStatusFilter(opt.value)}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-          {presentRoles.length > 1 && (
-            <div className="db-presets" role="group" aria-label="Filter by role" style={{ flexBasis: "100%" }}>
-              <button type="button" className="db-preset" aria-pressed={roleFilter === "all"} onClick={() => setRoleFilter("all")}>
-                All roles
-              </button>
+      <div className="db-card db-pad" style={{ marginBottom: 20 }}>
+        <div style={{ position: "relative" }}>
+          <Search size={16} style={{ position: "absolute", left: 14, top: "50%", transform: "translateY(-50%)", color: "var(--text-secondary)" }} />
+          <input
+            className="ps-input"
+            style={{ paddingLeft: 38 }}
+            placeholder="Search by name, email or phone"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
+        <div className="db-presets" role="group" aria-label="Status" style={{ marginTop: 12 }}>
+          <button type="button" className="db-preset" aria-pressed={statusFilter === "all"} onClick={() => setStatusFilter("all")}>All</button>
+          <button type="button" className="db-preset" aria-pressed={statusFilter === "active"} onClick={() => setStatusFilter("active")}>Active</button>
+          <button type="button" className="db-preset" aria-pressed={statusFilter === "inactive"} onClick={() => setStatusFilter("inactive")}>Inactive</button>
+        </div>
+        {presentRoles.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <div className="db-presets" role="group" aria-label="Role">
+              <button type="button" className="db-preset" aria-pressed={roleFilter === "all"} onClick={() => setRoleFilter("all")}>All roles</button>
               {presentRoles.map((r) => (
                 <button
                   key={r.value}
@@ -266,9 +280,9 @@ export default function StaffClient() {
                 </button>
               ))}
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       {loading ? (
         <div className="db-card" style={{ overflow: "hidden" }}>
@@ -335,6 +349,8 @@ export default function StaffClient() {
                   <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
                     <span className="db-row-title">{s.name}</span>
                     {!s.is_active && <span className="db-pill db-pill--muted db-show-sm">Inactive</span>}
+                    {s.invite_status === "active" && <span className="db-pill db-pill--green">Login</span>}
+                    {s.invite_status === "invited" && <span className="db-pill db-pill--amber">Invited</span>}
                   </div>
                   <div className="db-row-sub">{s.email ?? s.phone ?? "No contact details"}</div>
                 </div>
@@ -452,21 +468,43 @@ export default function StaffClient() {
           </div>
 
           {editing && (
-            <div className="db-toggles">
-              <label className="db-toggle">
-                <div>
-                  <div className="db-toggle-title">Active</div>
-                  <div className="db-toggle-sub">Turn off to mark this staff member as inactive</div>
-                </div>
-                <input
-                  type="checkbox"
-                  className="db-switch"
-                  checked={form.is_active}
-                  onChange={() => setForm((f) => ({ ...f, is_active: !f.is_active }))}
-                  aria-label="Active"
-                />
-              </label>
-            </div>
+            <>
+              <div className="db-toggles">
+                <label className="db-toggle">
+                  <div>
+                    <div className="db-toggle-title">Active</div>
+                    <div className="db-toggle-sub">Turn off to mark this staff member as inactive</div>
+                  </div>
+                  <input
+                    type="checkbox"
+                    className="db-switch"
+                    checked={form.is_active}
+                    onChange={() => setForm((f) => ({ ...f, is_active: !f.is_active }))}
+                    aria-label="Active"
+                  />
+                </label>
+              </div>
+
+              <div className="db-card-sub" style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span>
+                  {editing.invite_status === "active" && "Has a login"}
+                  {editing.invite_status === "invited" && "Invited — hasn't logged in yet"}
+                  {(editing.invite_status === "not_invited" || !editing.invite_status) && "No login yet"}
+                </span>
+                {editing.invite_status !== "active" && (
+                  <button
+                    type="button"
+                    className="ps-btn ps-btn--secondary ps-btn--sm"
+                    onClick={() => handleInvite(editing)}
+                    disabled={inviting || !editing.email}
+                  >
+                    <span>
+                      {inviting ? "Sending…" : editing.invite_status === "invited" ? "Resend invite" : "Send invite"}
+                    </span>
+                  </button>
+                )}
+              </div>
+            </>
           )}
         </div>
       </Sheet>
