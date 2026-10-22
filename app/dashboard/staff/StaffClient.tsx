@@ -39,6 +39,7 @@ const MODULE_LABELS: { key: keyof Permissions; label: string }[] = [
   { key: "workouts", label: "Workouts" },
   { key: "diet", label: "Diet plans" },
   { key: "recipes", label: "Recipe library" },
+  { key: "ai_recipes", label: "AI recipe helper" },
   { key: "leads", label: "Leads" },
   { key: "payments", label: "Payments" },
   { key: "membership_plans", label: "Membership plans" },

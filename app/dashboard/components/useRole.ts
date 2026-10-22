@@ -1,30 +1,18 @@
 "use client"
+// app/dashboard/components/useRole.ts
+// Browser-side role + permissions, used to show/hide UI. Real enforcement lives
+// in RLS policies and server routes, which resolve permissions with the same
+// rules from lib/permissions.ts.
 
 import { useEffect, useState } from "react"
 import { createClient } from "@/lib/supabase"
+import {
+  ROLE_DEFAULTS, NO_PERMISSIONS, resolvePermissions,
+  type StaffRole, type Permissions,
+} from "@/lib/permissions"
 
-export type StaffRole =
-  | "owner"
-  | "manager"
-  | "trainer"
-  | "dietitian"
-  | "receptionist"
-  | "accounts"
-  | "general_staff"
-
-export interface Permissions {
-  members: boolean
-  attendance: boolean
-  classes: boolean
-  workouts: boolean
-  diet: boolean
-  recipes: boolean
-  leads: boolean
-  payments: boolean
-  membership_plans: boolean
-  reports: boolean
-  settings: boolean
-}
+export { ROLE_DEFAULTS }
+export type { StaffRole, Permissions }
 
 export interface RoleData {
   user_id: string
@@ -33,44 +21,6 @@ export interface RoleData {
   staff_role: StaffRole
   permissions: Permissions
   loading: boolean
-}
-
-export const ROLE_DEFAULTS: Record<StaffRole, Permissions> = {
-  owner: {
-    members: true, attendance: true, classes: true, workouts: true,
-    diet: true, recipes: true, leads: true, payments: true,
-    membership_plans: true, reports: true, settings: true,
-  },
-  manager: {
-    members: true, attendance: true, classes: true, workouts: true,
-    diet: true, recipes: true, leads: true, payments: true,
-    membership_plans: true, reports: true, settings: false,
-  },
-  trainer: {
-    members: true, attendance: true, classes: true, workouts: true,
-    diet: false, recipes: false, leads: false, payments: false,
-    membership_plans: false, reports: false, settings: false,
-  },
-  dietitian: {
-    members: true, attendance: false, classes: false, workouts: false,
-    diet: true, recipes: true, leads: false, payments: false,
-    membership_plans: false, reports: false, settings: false,
-  },
-  receptionist: {
-    members: true, attendance: true, classes: false, workouts: false,
-    diet: false, recipes: false, leads: true, payments: true,
-    membership_plans: false, reports: false, settings: false,
-  },
-  accounts: {
-    members: false, attendance: false, classes: false, workouts: false,
-    diet: false, recipes: false, leads: false, payments: true,
-    membership_plans: true, reports: true, settings: false,
-  },
-  general_staff: {
-    members: true, attendance: true, classes: false, workouts: false,
-    diet: false, recipes: false, leads: false, payments: false,
-    membership_plans: false, reports: false, settings: false,
-  },
 }
 
 const LOADING: RoleData = {
@@ -91,7 +41,7 @@ export function useRole(): RoleData {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser()
       if (!user) {
-        setData({ ...LOADING, loading: false })
+        setData({ ...LOADING, permissions: { ...NO_PERMISSIONS }, loading: false })
         return
       }
 
@@ -102,55 +52,20 @@ export function useRole(): RoleData {
         .single()
 
       if (!row) {
-        // No user_roles row found — fail closed (no access), never default to owner.
+        // No user_roles row: fail closed, never default to owner.
         setData({
-          user_id: user.id,
-          org_id: "",
-          branch_id: "",
-          staff_role: "general_staff",
-          permissions: {
-            members: false, attendance: false, classes: false, workouts: false,
-            diet: false, recipes: false, leads: false, payments: false,
-            membership_plans: false, reports: false, settings: false,
-          },
-          loading: false,
+          user_id: user.id, org_id: "", branch_id: "",
+          staff_role: "general_staff", permissions: { ...NO_PERMISSIONS }, loading: false,
         })
         return
       }
 
-      // staff_role takes priority; fall back to legacy `role` column
-      // If neither is set, treat as owner (existing gym owner accounts)
-      const rawRole = row.staff_role ?? row.role ?? "owner"
-
-      // Normalise: legacy value "owner" maps directly; anything unrecognised → owner
-      const validRoles: StaffRole[] = [
-        "owner","manager","trainer","dietitian","receptionist","accounts","general_staff"
-      ]
-      const role: StaffRole = validRoles.includes(rawRole) ? rawRole : "owner"
-
-      // Owners always get full access — ignore any stored overrides
-      if (role === "owner") {
-        setData({
-          user_id: user.id,
-          org_id: row.org_id,
-          branch_id: row.branch_id,
-          staff_role: "owner",
-          permissions: ROLE_DEFAULTS.owner,
-          loading: false,
-        })
-        return
-      }
-
-      // Non-owners: merge role defaults with any per-staff overrides stored in DB
-      const base = ROLE_DEFAULTS[role]
-      const overrides = (row.permissions ?? {}) as Partial<Permissions>
-      const permissions: Permissions = { ...base, ...overrides }
-
+      const { role, permissions } = resolvePermissions(row)
       setData({
         user_id: user.id,
         org_id: row.org_id,
         branch_id: row.branch_id,
-        staff_role: role,
+        staff_role: role ?? "general_staff",
         permissions,
         loading: false,
       })

@@ -5,8 +5,8 @@ export type MuscleGroup =
   | 'legs' | 'core' | 'cardio' | 'full_body'
 
 export type Equipment =
-  | 'barbell' | 'dumbbell' | 'machine'
-  | 'cable' | 'bodyweight' | 'cardio_machine'
+  | 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'bodyweight'
+  | 'cardio_machine' | 'kettlebell' | 'resistance_band' | 'other'
 
 export type MovementType = 'compound' | 'isolation' | 'cardio' | 'flexibility'
 
@@ -16,6 +16,18 @@ export type WorkoutGoal =
 
 export type Difficulty = 'beginner' | 'intermediate' | 'advanced'
 
+// Exercise category — multi-select, stored as text[] on workout_exercises.category.
+// The 8 below are the suggested/known set (get an icon + a fixed label in the UI).
+// Gyms can also add their own free-form tags (see "Custom" in the category picker) —
+// those are just lowercase_snake strings, not part of this union, so ExerciseCategory
+// is a hint for the common case, not an exhaustive type. Use `string` when reading
+// `category` off a real row.
+export const EXERCISE_CATEGORIES = [
+  'strength', 'cardio', 'yoga', 'pilates',
+  'mobility', 'functional_hiit', 'bodyweight', 'sports',
+] as const
+export type ExerciseCategory = typeof EXERCISE_CATEGORIES[number]
+
 export interface WorkoutExercise {
   id: string
   org_id: string | null
@@ -23,8 +35,26 @@ export interface WorkoutExercise {
   muscle_group: MuscleGroup
   equipment: Equipment
   movement_type: MovementType
+  category: string[]
   description: string | null
+  image_url: string | null
   video_url: string | null
+  is_active?: boolean          // false = archived (hidden from pickers, kept for old plans)
+  created_at: string
+}
+
+// Category rows live in exercise_categories (org_id null = built-in, set = this gym's).
+// workout_exercises.category stores the slugs; this table supplies name + colour.
+export type CategoryColor = 'blue' | 'cyan' | 'sky' | 'teal' | 'indigo' | 'gray'
+export const CATEGORY_COLORS: CategoryColor[] = ['blue', 'cyan', 'sky', 'teal', 'indigo', 'gray']
+
+export interface ExerciseCategoryRow {
+  id: string
+  org_id: string | null
+  slug: string
+  name: string
+  color: CategoryColor
+  sort_order: number
   created_at: string
 }
 
@@ -120,4 +150,20 @@ export const MUSCLE_GROUP_LABELS: Record<MuscleGroup, string> = {
 export const EQUIPMENT_LABELS: Record<Equipment, string> = {
   barbell: 'Barbell', dumbbell: 'Dumbbell', machine: 'Machine',
   cable: 'Cable', bodyweight: 'Bodyweight', cardio_machine: 'Cardio Machine',
+  kettlebell: 'Kettlebell', resistance_band: 'Resistance Band', other: 'Other',
+}
+
+export const MOVEMENT_LABELS: Record<MovementType, string> = {
+  compound: 'Compound', isolation: 'Isolation', cardio: 'Cardio', flexibility: 'Flexibility',
+}
+
+export const CATEGORY_LABELS: Record<ExerciseCategory, string> = {
+  strength: 'Strength',
+  cardio: 'Cardio',
+  yoga: 'Yoga',
+  pilates: 'Pilates',
+  mobility: 'Mobility',
+  functional_hiit: 'Functional / HIIT',
+  bodyweight: 'Bodyweight',
+  sports: 'Sports',
 }

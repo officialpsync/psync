@@ -229,7 +229,11 @@ export async function POST(req: NextRequest) {
     const TREAT_DAYS        = new Set([3, 7])
 
     // ── 7. Fetch ingredients, resolve dislikes and allergies to IDs ───────
+    // Built-ins + this member's gym only. The service role bypasses RLS, so this
+    // filter is what keeps one gym's private ingredients out of another gym's plans.
     const { data: ingredientData, error: ingErr } = await supabase.from('ingredients').select('*')
+      .or(`org_id.is.null,org_id.eq.${member.org_id}`)
+      .eq('is_active', true)
     if (ingErr) console.warn('Failed to fetch ingredients:', ingErr.message)
 
     const ingredientRows: Record<number, any> = {}

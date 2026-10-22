@@ -10,7 +10,9 @@ export function DesignStyles() {
 }
 
 export const DB_CSS = `
-.db {
+/* Shared tokens. Sheets portal to <body>, outside .db, so they need the same tokens:
+   one selector list keeps a single source of truth for the brand palette. */
+.db, .ps-sheet-root {
   --db-ease: cubic-bezier(0.23, 1, 0.32, 1);
   --db-border: rgba(60,60,67,0.10);
   --db-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 4px 16px rgba(0,0,0,0.04);
@@ -18,8 +20,31 @@ export const DB_CSS = `
   --db-r-card: calc(var(--radius-lg) + 4px);   /* 20px on Soft */
   --db-r-ctl:  var(--radius-md);               /* 12px on Soft: buttons, inputs, rows */
   --db-r-sm:   calc(var(--radius-md) - 2px);   /* 10px on Soft: chips, icon buttons */
-  max-width: 1320px;
+
+  /* Brand palette — sampled from the Psync logo. Exactly two hues: */
+  --accent: #0A66D6;              /* logo's deep blue */
+  --brand-2: #09D3F5;             /* logo's light cyan */
+  --accent-strong: #084FA6;       /* deep blue, darkened — gradients, hover depth */
+  --accent-fg: #ffffff;
+  --accent-dim: rgba(10,102,214,0.10);
+  --brand-2-dim: rgba(9,211,245,0.14);
+  --brand-grad: linear-gradient(135deg, var(--brand-2) 0%, var(--accent) 100%);
+
+  /* Every tone that used to carry its own decorative hue now reuses the two brand
+     colors at different mixes/tints, so "good", "money" and "growth" read as one
+     palette, not four. Amber and red stay outside this — they are functional
+     (warnings, errors, expiry), never decorative, so they keep their own hue. */
+  --green: var(--accent);
+  --green-dim: var(--accent-dim);
+  --green-fill: var(--brand-2);
+  --purple: var(--accent-strong);
+  --purple-dim: var(--accent-dim);
+  --purple-fill: var(--accent);
+  --teal: var(--brand-2);
+  --teal-dim: var(--brand-2-dim);
+  --teal-fill: var(--brand-2);
 }
+.db { max-width: 1320px; }
 
 /* Entrance — staggered, transform/opacity only */
 @keyframes db-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -58,10 +83,10 @@ export const DB_CSS = `
 .db-section-title { font-size: 16px; font-weight: 650; letter-spacing: -0.015em; margin: 4px 0 12px; color: var(--text-primary); }
 
 /* Tones */
-.db-tone-blue   { --t: #0071e3; --t-dim: rgba(0,113,227,0.10); --t-grad: linear-gradient(135deg,#3b9bff,#0062cc); }
-.db-tone-green  { --t: #1f8a3b; --t-dim: rgba(52,199,89,0.13);  --t-grad: linear-gradient(135deg,#4cd964,#1fae4a); }
-.db-tone-purple { --t: #8944ab; --t-dim: rgba(175,82,222,0.12); --t-grad: linear-gradient(135deg,#c77dff,#8e3fd1); }
-.db-tone-amber  { --t: #b45309; --t-dim: rgba(255,159,10,0.14); --t-grad: linear-gradient(135deg,#ffb340,#ff8a00); }
+.db-tone-blue   { --t: var(--accent);        --t-dim: var(--accent-dim);   --t-grad: linear-gradient(135deg, var(--accent-strong), var(--accent)); }
+.db-tone-green  { --t: var(--brand-2);       --t-dim: var(--brand-2-dim);   --t-grad: var(--brand-grad); }
+.db-tone-purple { --t: var(--accent-strong); --t-dim: var(--accent-dim);    --t-grad: linear-gradient(135deg, var(--accent), var(--accent-strong)); }
+.db-tone-amber  { --t: #b45309; --t-dim: rgba(255,159,10,0.14); --t-grad: linear-gradient(135deg,#ffb340,#ff8a00); } /* functional only — expiry/warnings */
 .db-chip { width: 32px; height: 32px; border-radius: var(--db-r-sm, 10px); display: grid; place-items: center; color: #fff; background: var(--t-grad); flex-shrink: 0;
   box-shadow: 0 3px 10px -2px color-mix(in srgb, var(--t) 45%, transparent); }
 .db-chip--lg { width: 40px; height: 40px; border-radius: var(--db-r-ctl, 12px); }
@@ -92,7 +117,7 @@ export const DB_CSS = `
 
 /* Today hero */
 .db-hero { position: relative; overflow: hidden; border-radius: var(--db-r-card, 20px); padding: 20px; color: #fff; display: flex; flex-direction: column; gap: 16px; min-width: 0;
-  background: linear-gradient(145deg, #1a7f3c 0%, #24b35a 55%, #34c759 100%); box-shadow: 0 10px 30px -10px rgba(31,174,74,0.55); }
+  background: linear-gradient(145deg, var(--brand-2) 0%, var(--accent) 60%, var(--accent-strong) 100%); box-shadow: 0 10px 30px -10px rgba(10,102,214,0.5); }
 .db-hero-glow { position: absolute; width: 240px; height: 240px; right: -80px; top: -90px; border-radius: 50%; background: radial-gradient(circle, rgba(255,255,255,0.28), transparent 70%); pointer-events: none; }
 .db-hero-top { display: flex; justify-content: space-between; align-items: center; position: relative; }
 .db-hero-label { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; opacity: 0.92; }
@@ -103,7 +128,7 @@ export const DB_CSS = `
 .db-hero-body { display: flex; align-items: center; gap: 18px; position: relative; flex: 1; }
 .db-hero-value { font-size: 44px; font-weight: 700; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; }
 .db-hero-sub { font-size: 13px; opacity: 0.85; margin-top: 6px; line-height: 1.35; }
-.db-hero-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 40px; border-radius: 12px; background: #fff; color: #1a7f3c;
+.db-hero-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 40px; border-radius: 12px; background: #fff; color: var(--accent-strong);
   font-size: 14px; font-weight: 650; text-decoration: none; transition: transform 140ms var(--db-ease); }
 .db-ring { position: relative; width: 112px; height: 112px; flex-shrink: 0; }
 .db-ring-arc { transition: stroke-dashoffset 900ms var(--db-ease); }
@@ -143,7 +168,7 @@ export const DB_CSS = `
 /* Setup */
 .db-setup { margin-bottom: 16px; }
 .db-progress { height: 6px; border-radius: 3px; background: var(--fill); overflow: hidden; margin-bottom: 8px; }
-.db-progress span { display: block; height: 100%; background: linear-gradient(90deg, #3b9bff, #34c759); transform-origin: left; transition: transform 600ms var(--db-ease); }
+.db-progress span { display: block; height: 100%; background: linear-gradient(90deg, var(--brand-2), var(--accent)); transform-origin: left; transition: transform 600ms var(--db-ease); }
 .db-checks { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; margin: 0 -8px; }
 .db-check-row { display: flex; align-items: center; gap: 12px; padding: 11px 8px; border-radius: 12px; text-decoration: none; color: var(--text-primary); font-size: 14px; font-weight: 550; }
 .db-check-row--done { color: var(--text-tertiary); font-weight: 400; }
@@ -237,7 +262,7 @@ export const DB_CSS = `
 .db-trow:last-child { border-bottom: none; }
 .db-icon-btn { width: 32px; height: 32px; border-radius: var(--db-r-sm, 10px); display: grid; place-items: center; border: none; background: transparent; color: var(--text-tertiary); cursor: pointer; transition: background-color 150ms ease, color 150ms ease; }
 .db-profile { position: relative; overflow: hidden; border-radius: calc(var(--db-r-card, 20px) + 4px); padding: 24px; margin-bottom: 16px; color: #fff;
-  background: linear-gradient(135deg, var(--accent-strong) 0%, var(--accent) 45%, color-mix(in srgb, var(--accent) 55%, #5e5ce6) 100%); box-shadow: 0 14px 34px -14px color-mix(in srgb, var(--accent) 60%, transparent); }
+  background: linear-gradient(135deg, var(--accent-strong) 0%, var(--accent) 55%, var(--brand-2) 100%); box-shadow: 0 14px 34px -14px color-mix(in srgb, var(--accent) 60%, transparent); }
 .db-profile .db-hero-glow { right: -60px; top: -120px; width: 320px; height: 320px; }
 .db-profile-top { position: relative; display: flex; align-items: center; gap: 18px; flex-wrap: wrap; }
 .db-profile-name { font-size: 30px; font-weight: 700; letter-spacing: -0.03em; line-height: 1.1; margin: 0; }
@@ -558,6 +583,351 @@ export const DB_CSS = `
 }
 @media (prefers-reduced-motion: reduce) {
   .db-mxrow-track span { transition: none; }
+}
+
+/* ── Dashboard layout (dz-*) · 21 Oct 2026 ───────────────────────────────
+   12-col widget grid, edit mode, Today/MTD strips, compact numbers, Customize sheet.
+   Reuses --db-ease and --db-border. Hover gated, reduced motion handled. */
+.dz-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 16px; align-items: stretch; margin-bottom: 16px; }
+.dz-span-4  { grid-column: span 4; }
+.dz-span-6  { grid-column: span 6; }
+.dz-span-8  { grid-column: span 8; }
+.dz-span-12 { grid-column: span 12; }
+.dz-item { position: relative; min-width: 0; }
+.dz-body { height: 100%; }
+.dz-body > * { height: 100%; }
+
+/* Quick actions columns follow the widget's width, overriding the old fixed rules */
+.db .dz-span-4 .db-actions, .db .dz-span-6 .db-actions { grid-template-columns: 1fr 1fr; }
+.db .dz-span-8 .db-actions { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.db .dz-span-12 .db-actions { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+
+/* Edit mode */
+.dz-editing .dz-body { pointer-events: none; user-select: none; -webkit-user-select: none; }
+.dz-editing .dz-item { outline: 1.5px dashed var(--db-border); outline-offset: 4px; border-radius: var(--db-r-card, 20px); }
+.dz-item--dragging { z-index: 5; }
+.dz-item--dragging .dz-body > * { box-shadow: 0 18px 40px rgba(0,0,0,0.14); }
+.dz-editbar { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; padding: 10px 14px; border-radius: var(--radius-md); background: var(--accent-dim); color: var(--text-secondary); font-size: 13px; }
+.dz-editbar span { flex: 1; min-width: 0; }
+.dz-editbar .db-link { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; border: 0; background: none; padding: 0; font: inherit; cursor: pointer; }
+.dz-tools { position: absolute; top: 10px; right: 10px; z-index: 3; display: flex; align-items: center; gap: 4px; padding: 4px; border-radius: 10px;
+  background: rgba(255,255,255,0.86); -webkit-backdrop-filter: blur(16px) saturate(180%); backdrop-filter: blur(16px) saturate(180%);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.06), 0 6px 18px rgba(0,0,0,0.08); }
+
+/* Small controls (also used inside the Customize sheet) */
+.dz-tool { display: inline-grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer;
+  touch-action: manipulation; user-select: none; -webkit-user-select: none; transition: transform 120ms var(--db-ease, ease-out), background-color 150ms ease, color 150ms ease; }
+.dz-tool:active { transform: scale(0.94); }
+.dz-tool:disabled { opacity: 0.35; cursor: default; }
+.dz-grip { cursor: grab; touch-action: none; }
+.dz-grip:active { cursor: grabbing; }
+.dz-sizes { display: inline-flex; flex-shrink: 0; padding: 2px; border-radius: 8px; background: var(--fill); }
+.dz-size { min-width: 30px; height: 24px; padding: 0 7px; border: 0; border-radius: 6px; background: transparent; font: inherit; font-size: 12px; font-weight: 600; color: var(--text-secondary); cursor: pointer;
+  touch-action: manipulation; user-select: none; -webkit-user-select: none; transition: transform 120ms var(--db-ease, ease-out), background-color 150ms ease, color 150ms ease; }
+.dz-size:active { transform: scale(0.95); }
+.dz-size[aria-pressed="true"] { background: #fff; color: var(--text-primary); box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+
+/* Today / Month-to-date strips */
+.dz-strip { padding: 4px 16px 16px; overflow: visible; background: transparent; border: 0; box-shadow: none; }
+.dz-strip-head { display: flex; align-items: baseline; gap: 10px; padding: 10px 2px 12px; }
+.dz-strip-title { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 650; letter-spacing: -0.005em; color: var(--text-primary); }
+.dz-strip-title svg { align-self: center; color: var(--text-tertiary); }
+.dz-strip-meta { flex: 1; min-width: 0; font-size: 12.5px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dz-strip-edit { border: 0; background: none; padding: 0; font: inherit; font-size: 12.5px; cursor: pointer; white-space: nowrap; }
+.dz-strip-empty { padding: 4px 18px 18px; font-size: 13px; color: var(--text-tertiary); }
+/* Hairline dividers: 1px gap over a border-colored track */
+.dz-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(148px, 1fr)); gap: 10px; }
+.dz-cell { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 12px 14px;
+  background: #fff; border: 1px solid var(--db-border); border-radius: var(--db-r-ctl, 12px); box-shadow: var(--db-shadow);
+  transition: box-shadow 150ms ease, border-color 150ms ease; }
+.dz-cell-head { display: flex; align-items: center; gap: 7px; min-width: 0; text-decoration: none; touch-action: manipulation; transition: transform 120ms var(--db-ease); }
+.dz-cell-head:active { transform: scale(0.98); }
+.dz-cell-chip { flex-shrink: 0; width: 24px; height: 24px; border-radius: 8px; display: grid; place-items: center; color: #fff; background: var(--t-grad); }
+.dz-cell-label { min-width: 0; flex: 1; font-size: 12.5px; font-weight: 500; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.dz-cell-chev { flex-shrink: 0; color: var(--text-tertiary); opacity: 0; transform: translateX(-2px); transition: opacity 150ms ease, transform 150ms var(--db-ease, ease-out); }
+.dz-cell-value { font-size: 21px; line-height: 1.15; font-weight: 650; letter-spacing: -0.02em; color: var(--text-primary); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.dz-cell-foot { display: flex; align-items: center; gap: 4px; min-width: 0; font-size: 12px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dz-warn { color: var(--amber); font-weight: 600; }
+
+/* Compact number: 4.6K, click for 4,590 */
+.dz-num { font-variant-numeric: tabular-nums; }
+.dz-num--toggle { padding: 0; margin: 0; border: 0; background: none; font: inherit; color: inherit; letter-spacing: inherit; cursor: pointer; border-radius: 4px;
+  text-decoration: underline dotted transparent; text-underline-offset: 4px; touch-action: manipulation; transition: text-decoration-color 150ms ease; }
+.dz-num--toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Quick actions header */
+.dz-actions-wrap { display: flex; flex-direction: column; min-width: 0; }
+.dz-actions-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.dz-actions-head .db-link { border: 0; background: none; padding: 0; font: inherit; font-size: 13px; cursor: pointer; }
+
+/* Customize sheet */
+.dz-tabs { display: flex; gap: 2px; padding: 2px; margin-bottom: 14px; border-radius: 10px; background: var(--fill); overflow-x: auto; }
+.dz-tab { flex: 1; min-width: max-content; height: 30px; padding: 0 12px; border: 0; border-radius: 8px; background: transparent; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-secondary); cursor: pointer;
+  touch-action: manipulation; user-select: none; -webkit-user-select: none; transition: background-color 150ms ease, color 150ms ease; }
+.dz-tab[aria-selected="true"] { background: #fff; color: var(--text-primary); box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+.dz-hint { margin: 0 0 12px; font-size: 13px; color: var(--text-tertiary); }
+.dz-olist { display: flex; flex-direction: column; }
+.dz-orow { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--separator); }
+.dz-orow:last-child { border-bottom: 0; }
+.dz-orow-text { flex: 1; min-width: 0; }
+.dz-orow-move { display: flex; gap: 2px; flex-shrink: 0; }
+.dz-orow--off .db-toggle-title { color: var(--text-secondary); }
+.dz-olist-sep { padding: 14px 0 4px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; color: var(--text-tertiary); }
+
+@media (hover: hover) and (pointer: fine) {
+  .dz-tool:hover:not(:disabled) { background: var(--fill); color: var(--text-primary); }
+  .dz-size:hover:not([aria-pressed="true"]) { color: var(--text-primary); }
+  .dz-tab:hover:not([aria-selected="true"]) { color: var(--text-primary); }
+  .dz-cell:hover { border-color: color-mix(in srgb, var(--t) 35%, var(--db-border)); box-shadow: var(--db-shadow-hover); }
+  .dz-cell:hover .dz-cell-chev { opacity: 1; transform: translateX(0); }
+  .dz-num--toggle:hover { text-decoration-color: currentColor; }
+}
+@media (max-width: 1180px) {
+  .dz-span-4 { grid-column: span 6; }
+  .dz-span-8 { grid-column: span 12; }
+}
+@media (max-width: 760px) {
+  .dz-grid { gap: 12px; margin-bottom: 12px; }
+  .dz-grid > * { grid-column: span 12; }
+  .db .dz-grid .db-actions { grid-template-columns: 1fr 1fr; }
+  .dz-strip-head { flex-wrap: wrap; }
+  .dz-strip-meta { order: 3; flex-basis: 100%; }
+  .dz-cells { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .dz-cell { padding: 12px; }
+  .dz-cell-value { font-size: 20px; }
+  .dz-editbar { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dz-tool, .dz-size, .dz-cell-chev { transition: background-color 150ms ease, color 150ms ease, opacity 150ms ease; }
+  .dz-tool:active, .dz-size:active, .dz-cell-chev { transform: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .dz-tools { background: #fff; -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* ── AI recipe helper + ingredient-line editor (db-ai-*, db-ingline-*, db-totals-*, db-stepper) ──
+   These classes were used throughout the recipes page but had no rules anywhere — that was the
+   actual cause of the plain/unstyled look, not a design choice. Added 22 Oct 2026. */
+
+.db-ai {
+  position: relative; padding: 18px; border-radius: var(--db-r-card, 20px);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 5%, #fff) 0%, #fff 55%);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--db-border));
+  box-shadow: var(--db-shadow); margin-bottom: 18px;
+}
+.db-ai-head { display: flex; gap: 12px; margin-bottom: 14px; }
+.db-ai-chip {
+  flex-shrink: 0; width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center;
+  color: #fff; background: var(--brand-grad); box-shadow: 0 4px 12px -2px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.db-ai-title { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: var(--text-primary); }
+.db-ai-sub { margin-top: 2px; font-size: 13px; line-height: 1.4; color: var(--text-secondary); }
+.db-ai-grid { display: flex; gap: 10px; margin-bottom: 14px; }
+.db-ai-grid .ps-input { flex: 1; min-width: 0; }
+.db-ai-grid .ps-btn { flex-shrink: 0; white-space: nowrap; }
+.db-ai-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--db-border); font-size: 12.5px; color: var(--text-tertiary); }
+
+.db-stepper {
+  display: inline-flex; align-items: center; height: 30px; border-radius: 9px; background: var(--fill); overflow: hidden;
+}
+.db-stepper button {
+  width: 30px; height: 30px; border: 0; background: transparent; font-size: 16px; line-height: 1; font-weight: 600;
+  color: var(--text-primary); cursor: pointer; touch-action: manipulation; transition: background-color 150ms ease;
+}
+.db-stepper button:disabled { opacity: 0.35; cursor: default; }
+.db-stepper output { min-width: 26px; text-align: center; font-size: 13.5px; font-weight: 650; font-variant-numeric: tabular-nums; }
+
+.db-ai-est {
+  display: inline-flex; align-items: center; gap: 3px; flex-shrink: 0; padding: 1px 7px 1px 6px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-dim); white-space: nowrap;
+}
+
+.db-inglist { border-radius: var(--db-r-card, 20px); border: 1px solid var(--db-border); background: #fff; box-shadow: var(--db-shadow); overflow: hidden; }
+.db-ingline {
+  display: flex; align-items: center; gap: 12px; padding: 12px 2px; border-bottom: 1px solid var(--db-border);
+}
+.db-ingline:last-child { border-bottom: 0; }
+.db-ingline-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.db-ingline-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 3px; font-size: 12.5px; color: var(--text-tertiary); }
+.db-ingline-sub select {
+  height: 26px; padding: 0 8px; border-radius: 7px; border: 1px solid var(--db-border); background: #fff;
+  font: inherit; font-size: 12px; color: var(--text-primary); cursor: pointer;
+}
+.db-ingline-sub select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.db-linkbtn {
+  border: 0; background: none; padding: 0; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent); cursor: pointer;
+  touch-action: manipulation; transition: opacity 150ms ease;
+}
+.db-linkbtn:active { opacity: 0.6; }
+
+.db-grams {
+  display: inline-flex; align-items: center; flex-shrink: 0; gap: 3px; height: 36px; padding: 0 10px; border-radius: 10px;
+  background: var(--fill); font-size: 13.5px; font-weight: 600; color: var(--text-primary);
+}
+.db-grams input {
+  width: 42px; border: 0; background: transparent; font: inherit; font-weight: 650; color: var(--text-primary);
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+.db-grams input:focus-visible { outline: none; }
+.db-grams span { color: var(--text-tertiary); font-weight: 500; }
+
+.db-ingadd { display: flex; gap: 8px; margin: 12px 0; }
+.db-ingadd .ps-input { flex: 1; min-width: 0; }
+
+.db-totals {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px;
+  border-radius: var(--db-r-card, 20px); background: var(--accent-dim); border: 1px solid color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.db-totals-main { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.db-totals-sub { margin-top: 2px; font-size: 12.5px; color: var(--text-secondary); }
+
+@media (hover: hover) and (pointer: fine) {
+  .db-stepper button:hover:not(:disabled) { background: rgba(0,0,0,0.06); }
+  .db-linkbtn:hover { text-decoration: underline; }
+  .db-ingline-sub select:hover { border-color: color-mix(in srgb, var(--accent) 35%, var(--db-border)); }
+}
+@media (max-width: 560px) {
+  .db-ai-grid { flex-direction: column; }
+  .db-ingline { flex-wrap: wrap; }
+  .db-totals { flex-direction: column; align-items: flex-start; }
+}
+
+/* ── Form sections inside sheets (db-fieldset*) and the ingredient nutrition editor (db-nutri*) ──
+   db-fieldset / db-field-row were used by the recipe and ingredient forms with no rules. 22 Oct 2026. */
+.db-fieldset { margin-top: 20px; }
+.db-fieldset:first-child { margin-top: 4px; }
+.db-fieldset-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.db-fieldset-label { display: block; font-size: 12px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-tertiary); margin-bottom: 10px; }
+.db-fieldset-head .db-fieldset-label { margin-bottom: 0; }
+.db-fieldset-hint { font-size: 12.5px; color: var(--text-tertiary); }
+.db-field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.db-opt { margin-left: 4px; font-size: 11.5px; font-weight: 500; color: var(--text-tertiary); text-transform: none; letter-spacing: 0; }
+
+.db-ing-est {
+  display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; margin: 4px 0 4px; border-radius: 14px;
+  background: var(--accent-dim); border: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
+  font-size: 13px; line-height: 1.45; color: var(--text-secondary);
+}
+.db-ing-est strong { display: block; font-size: 13.5px; font-weight: 650; color: var(--text-primary); margin-bottom: 1px; }
+.db-ing-est-icon { flex-shrink: 0; width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center; color: #fff; background: var(--brand-grad); }
+
+/* Nutrition panel: one calm card, calories as the headline number, macros as tiles */
+.db-nutri { border-radius: 18px; border: 1px solid var(--db-border); background: #fff; overflow: hidden; }
+.db-nutri-kcal { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--db-border); cursor: text; }
+.db-nutri-kcal-label { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.db-nutri-kcal-field { display: inline-flex; align-items: baseline; gap: 6px; }
+.db-nutri-kcal-field input {
+  width: 110px; border: 0; background: transparent; padding: 0; text-align: right; outline: none;
+  font: inherit; font-size: 28px; font-weight: 700; letter-spacing: -0.03em; color: var(--text-primary); font-variant-numeric: tabular-nums;
+}
+.db-nutri-kcal-field input::placeholder { color: rgba(60,60,67,0.25); }
+.db-nutri-kcal-field em { font-style: normal; font-size: 13px; font-weight: 550; color: var(--text-tertiary); }
+.db-nutri-kcal:focus-within { background: color-mix(in srgb, var(--accent) 4%, #fff); }
+
+.db-nutri-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.db-nutri-cell { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; cursor: text; border-right: 1px solid var(--db-border); transition: background-color 150ms ease; }
+.db-nutri-cell:last-child { border-right: 0; }
+.db-nutri-cell:focus-within { background: color-mix(in srgb, var(--accent) 4%, #fff); }
+.db-nutri-cell-label { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 550; color: var(--text-secondary); }
+.db-nutri-cell-label i { width: 7px; height: 7px; border-radius: 2px; background: var(--nt); flex-shrink: 0; }
+.db-nutri-cell-field { display: inline-flex; align-items: baseline; gap: 3px; }
+.db-nutri-cell-field input {
+  width: 100%; min-width: 0; border: 0; background: transparent; padding: 0; outline: none;
+  font: inherit; font-size: 19px; font-weight: 650; letter-spacing: -0.02em; color: var(--text-primary); font-variant-numeric: tabular-nums;
+}
+.db-nutri-cell-field input::placeholder { color: rgba(60,60,67,0.25); }
+.db-nutri-cell-field em { font-style: normal; font-size: 12.5px; color: var(--text-tertiary); }
+
+/* Macro tones: the two brand hues plus the deep blue; fiber is neutral */
+.db-nutri-p { --nt: var(--accent); }
+.db-nutri-c { --nt: var(--brand-2); }
+.db-nutri-f { --nt: var(--accent-strong); }
+.db-nutri-x { --nt: rgba(60,60,67,0.35); }
+
+.db-nutri-split { padding: 12px 16px 14px; border-top: 1px solid var(--db-border); background: rgba(118,118,128,0.04); }
+.db-nutri-bar { display: flex; gap: 3px; height: 6px; }
+.db-nutri-bar span { flex-basis: 0; min-width: 4px; border-radius: 3px; background: var(--nt); transition: flex-grow 300ms var(--db-ease); }
+.db-nutri-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 9px; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.db-nutri-legend span { display: inline-flex; align-items: center; gap: 5px; }
+.db-nutri-legend i { width: 7px; height: 7px; border-radius: 2px; background: var(--nt); }
+.db-nutri-implied { margin-left: auto; color: var(--text-tertiary); }
+
+.db-callout svg { color: currentColor; }
+
+@media (max-width: 640px) {
+  .db-field-row { grid-template-columns: 1fr; }
+  .db-nutri-grid { grid-template-columns: 1fr 1fr; }
+  .db-nutri-cell:nth-child(2) { border-right: 0; }
+  .db-nutri-cell:nth-child(-n+2) { border-bottom: 1px solid var(--db-border); }
+  .db-nutri-kcal-field input { font-size: 26px; width: 96px; }
+  .db-nutri-implied { margin-left: 0; flex-basis: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .db-nutri-bar span { transition: none; }
+}
+
+/* ── Wide sheet layouts: recipe editor (db-rs-*) and ingredient editor (db-is-*) · 22 Oct 2026 ──
+   Phones: one column, sections reordered with the order property (column wrappers become display: contents).
+   Desktop (≥ 900px): two panels split by a hairline. */
+.db-rs { display: flex; flex-direction: column; gap: 18px; }
+.db-rs > .db-ai { margin-bottom: 0; }
+.db-rs-layout, .db-is-layout { display: flex; flex-direction: column; gap: 26px; }
+.db-rs-main, .db-rs-side, .db-is-main, .db-is-side { display: contents; }
+.db-rs-o-details { order: 1; } .db-rs-o-ing { order: 2; } .db-rs-o-nutri { order: 3; } .db-rs-o-tags { order: 4; } .db-rs-o-method { order: 5; }
+.db-is-o-name { order: 1; } .db-is-o-group { order: 2; } .db-is-o-nutri { order: 3; } .db-is-o-suit { order: 4; } .db-is-o-notes { order: 5; }
+.db-is-layout > * > .db-fieldset { margin-top: 0; }
+
+.db-rs-section { min-width: 0; }
+.db-rs-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.db-rs-head h3 { margin: 0; display: inline-flex; align-items: center; gap: 8px; font-size: 15px; font-weight: 680; letter-spacing: -0.01em; color: var(--text-primary); }
+.db-rs-head h3 label { cursor: pointer; }
+.db-rs-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px; display: inline-grid; place-items: center; font-size: 11.5px; font-weight: 650; color: var(--accent); background: var(--accent-dim); font-variant-numeric: tabular-nums; }
+.db-rs-servings { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+.db-rs-sub { margin: 16px 0 8px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+
+.db-rs-empty { display: flex; align-items: center; gap: 10px; padding: 18px 16px; border-radius: 16px; border: 1.5px dashed var(--db-border); color: var(--text-tertiary); font-size: 13.5px; }
+.db-ingline--unmatched { background: color-mix(in srgb, var(--amber) 5%, transparent); }
+.db-inglist .db-ingline { padding-left: 14px; padding-right: 8px; }
+
+.db-ingadd-search { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; height: 40px; padding: 0 12px; gap: 8px; border-radius: 12px; background: var(--fill); color: var(--text-tertiary); transition: box-shadow 150ms ease, background-color 150ms ease; }
+.db-ingadd-search input { flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; outline: none; font: inherit; font-size: 14px; color: var(--text-primary); }
+.db-ingadd-search:focus-within { background: #fff; box-shadow: 0 0 0 2px var(--accent); }
+.db-ingadd .db-grams { height: 40px; }
+.db-ingadd .ps-btn { height: 40px; }
+
+.db-rs-calc { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px 10px 14px; margin-bottom: 10px; border-radius: 14px; background: var(--accent-dim); }
+.db-rs-calc-main { font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.db-rs-calc-main strong { color: var(--text-primary); font-weight: 650; }
+.db-rs-calc-sub { margin-top: 1px; font-size: 12px; color: var(--text-tertiary); }
+.db-rs-use { flex-shrink: 0; display: inline-flex; align-items: center; gap: 5px; height: 32px; padding: 0 12px; border: 0; border-radius: 9px; font: inherit; font-size: 13px; font-weight: 650; color: #fff; background: var(--accent); cursor: pointer; touch-action: manipulation; transition: transform 120ms var(--db-ease), background-color 150ms ease; }
+.db-rs-use:active { transform: scale(0.97); }
+.db-rs-use:disabled { opacity: 0.4; cursor: default; }
+.db-rs-prep { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; }
+.db-rs-prep .ps-label { margin: 0; }
+
+@media (hover: hover) and (pointer: fine) {
+  .db-rs-use:hover:not(:disabled) { background: var(--accent-strong); }
+}
+
+@media (min-width: 900px) {
+  .db-rs-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 0; align-items: start; }
+  .db-rs-main, .db-rs-side { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+  .db-rs-main { padding-right: 28px; }
+  .db-rs-side { padding-left: 28px; border-left: 1px solid var(--db-border); }
+
+  .db-is-layout { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); grid-template-areas: "a s" "b s"; gap: 0 28px; align-items: start; }
+  .db-is-main, .db-is-side { display: flex; flex-direction: column; gap: 22px; min-width: 0; }
+  .db-is-main { grid-area: a; }
+  .db-is-main--after { grid-area: b; margin-top: 22px; }
+  .db-is-side { grid-area: s; padding-left: 28px; border-left: 1px solid var(--db-border); align-self: stretch; }
+}
+@media (max-width: 640px) {
+  .db-rs-head { flex-wrap: wrap; }
+  .db-ingadd { flex-wrap: wrap; }
+  .db-ingadd-search { flex-basis: 100%; }
+  .db-ingadd .ps-btn { flex: 1; }
 }
 `;
 

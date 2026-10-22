@@ -12,7 +12,7 @@ import {
 import {
   LayoutGrid, Users, UserCheck, CalendarDays, Dumbbell, Salad,
   Wallet, Ticket, BarChart2, Settings, LogOut, Menu, ChevronRight, ChevronDown,
-  ChefHat, UserPlus, UsersRound, ClipboardList, PanelLeftClose, PanelLeftOpen,
+  ChefHat, UserPlus, UsersRound, ClipboardList, PanelLeftClose, PanelLeftOpen, Library, Carrot,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase";
@@ -44,8 +44,10 @@ const LEADS: NavItem     = { href: "/dashboard/leads", label: "Leads", icon: Use
 const ATTENDANCE: NavItem = { href: "/dashboard/attendance", label: "Attendance", icon: UserCheck, permKey: "attendance" };
 const CLASSES: NavItem    = { href: "/dashboard/classes", label: "Classes", icon: CalendarDays, permKey: "classes" };
 const WORKOUTS: NavItem   = { href: "/dashboard/workouts", label: "Workouts", icon: Dumbbell, permKey: "workouts" };
+const EXERCISES: NavItem  = { href: "/dashboard/workouts/exercises", label: "Exercises", icon: Library, permKey: "workouts" };
 const DIET: NavItem       = { href: "/dashboard/diet", label: "Diet plans", icon: Salad, permKey: "diet" };
 const RECIPES: NavItem    = { href: "/dashboard/diet/recipes", label: "Recipe library", icon: ChefHat, permKey: "recipes" };
+const INGREDIENTS: NavItem = { href: "/dashboard/diet/ingredients", label: "Ingredients", icon: Carrot, permKey: "recipes" };
 const TEMPLATES: NavItem  = { href: "/dashboard/diet/templates", label: "Diet templates", icon: ClipboardList, permKey: "diet" };
 const PAYMENTS: NavItem   = { href: "/dashboard/payments", label: "Payments", icon: Wallet, permKey: "payments" };
 const PLANS: NavItem      = { href: "/dashboard/membership-plans", label: "Membership plans", icon: Ticket, permKey: "membership_plans" };
@@ -54,12 +56,12 @@ const SETTINGS: NavItem   = { href: "/dashboard/settings", label: "Settings", ic
 const STAFF: NavItem      = { href: "/dashboard/staff", label: "Staff", icon: UsersRound };
 
 /** Nutrition and billing each have 2–3 related pages, so they fold into a submenu. */
-const NUTRITION: NavGroup = { key: "nutrition", label: "Nutrition", icon: Salad, children: [DIET, RECIPES, TEMPLATES] };
+const NUTRITION: NavGroup = { key: "nutrition", label: "Nutrition", icon: Salad, children: [DIET, RECIPES, INGREDIENTS, TEMPLATES] };
 const BILLING: NavGroup   = { key: "billing", label: "Billing", icon: Wallet, children: [PAYMENTS, PLANS] };
 
 const SECTIONS_DEF: { title: string; entries: NavEntry[] }[] = [
   { title: "People",   entries: [MEMBERS, LEADS, ATTENDANCE] },
-  { title: "Coaching", entries: [CLASSES, WORKOUTS, NUTRITION] },
+  { title: "Coaching", entries: [CLASSES, WORKOUTS, EXERCISES, NUTRITION] },
   { title: "Business", entries: [BILLING, REPORTS] },
 ];
 

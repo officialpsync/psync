@@ -1,387 +1,202 @@
 "use client"
 // app/dashboard/workouts/page.tsx
 
-import { useCallback, useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { Dumbbell, Plus, Search, Loader2, Users, Copy, Trash2, ChevronRight } from "lucide-react"
-import { supabase } from "@/lib/supabase"
+import { Dumbbell, Plus, Search, Loader2, Users, Copy, Trash2, Layers, Library, CalendarDays, Clock } from "lucide-react"
+import { DesignStyles } from "../components/DesignSystem"
 import { Skeleton } from "../components/ui"
-import { WorkoutGoal, Difficulty, GOAL_LABELS, GOAL_BADGE, DIFFICULTY_LABELS } from "@/lib/workout/types"
+import { GOAL_LABELS, DIFFICULTY_LABELS, type WorkoutGoal, type WorkoutProgram } from "@/lib/workout/types"
+import { clonePlan } from "./components/planActions"
+import { loadOrgContext, supabase } from "./components/shared"
 
-// ── Types ──────────────────────────────────────────────────────────────────
+type Tab = "mine" | "templates"
 
-interface WorkoutProgram {
-  id: string
-  org_id: string | null
-  name: string
-  goal: WorkoutGoal
-  difficulty: Difficulty
-  days_per_week: number
-  duration_weeks: number
-  is_template: boolean
-  notes: string | null
-  status: string
-  created_at: string
-  updated_at: string
-  assigned_count?: number
-}
-
-// ── Program card ───────────────────────────────────────────────────────────
-
-function ProgramCard({ program, isGlobal, onClone, onDelete, cloning }: {
-  program: WorkoutProgram
-  isGlobal: boolean
-  onClone: (p: WorkoutProgram) => void
-  onDelete: (p: WorkoutProgram) => void
-  cloning: boolean
+function PlanCard({ p, isGlobal, busy, onClone, onDelete }: {
+  p: WorkoutProgram; isGlobal: boolean; busy: boolean
+  onClone: () => void; onDelete: () => void
 }) {
   return (
-    <Link
-      href={`/dashboard/workouts/${program.id}`}
-      className="ps-card"
-      style={{ display: "flex", flexDirection: "column", gap: 12, padding: "16px 18px", textDecoration: "none", color: "inherit", transition: "box-shadow 120ms" }}
-      onMouseEnter={(e) => (e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.08)")}
-      onMouseLeave={(e) => (e.currentTarget.style.boxShadow = "none")}
-    >
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
-        <div style={{ width: 42, height: 42, borderRadius: 12, background: "var(--accent-dim)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <Dumbbell size={20} style={{ color: "var(--accent)" }} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontSize: 15, fontWeight: 650, color: "var(--text-primary)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-            {program.name}
-          </div>
-          <div style={{ fontSize: 12.5, color: "var(--text-tertiary)", marginTop: 3 }}>
-            {program.days_per_week} days/week · {program.duration_weeks} weeks
+    <article className="db-card db-plan db-tone-purple">
+      <Link href={`/dashboard/workouts/${p.id}`} style={{ textDecoration: "none", color: "inherit", display: "flex", flexDirection: "column", gap: 4 }}>
+        <div className="db-plan-head" style={{ marginBottom: 10 }}>
+          <span className="db-chip db-chip--lg"><Dumbbell size={18} strokeWidth={2.3} /></span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="db-plan-name">{p.name}</div>
+            <div className="db-card-sub">
+              {isGlobal ? "Built-in template" : p.is_template ? "Your template" : "Gym plan"}
+            </div>
           </div>
         </div>
-        <ChevronRight size={16} style={{ color: "var(--text-tertiary)", flexShrink: 0, marginTop: 2 }} />
-      </div>
-
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <span className={`ps-badge ${GOAL_BADGE[program.goal] ?? ""}`} style={{ fontSize: 12 }}>
-          {GOAL_LABELS[program.goal]}
-        </span>
-        <span className="ps-badge" style={{ fontSize: 12 }}>
-          {DIFFICULTY_LABELS[program.difficulty]}
-        </span>
-        {isGlobal && <span className="ps-badge" style={{ fontSize: 12 }}>Template</span>}
-        {program.is_template && !isGlobal && <span className="ps-badge ps-badge--blue" style={{ fontSize: 12 }}>Your template</span>}
-      </div>
-
-      {typeof program.assigned_count === "number" && program.assigned_count > 0 && (
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--text-tertiary)" }}>
-          <Users size={13} />
-          {program.assigned_count} member{program.assigned_count !== 1 ? "s" : ""} assigned
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <span className="db-pill db-pill--purple">{GOAL_LABELS[p.goal]}</span>
+          <span className="db-pill db-pill--muted">{DIFFICULTY_LABELS[p.difficulty]}</span>
         </div>
-      )}
+        <div style={{ display: "flex", gap: 14, marginTop: 12, fontSize: 13, color: "var(--text-secondary)" }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><CalendarDays size={14} />{p.days_per_week} days / week</span>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}><Clock size={14} />{p.duration_weeks} weeks</span>
+        </div>
+        {!isGlobal && (p.assigned_count ?? 0) > 0 && (
+          <span className="db-plan-members"><Users size={13} /><strong>{p.assigned_count}</strong> member{p.assigned_count === 1 ? "" : "s"} on it</span>
+        )}
+      </Link>
 
-      {/* Actions — stop propagation so clicks don't navigate */}
-      <div style={{ display: "flex", gap: 6, borderTop: "1px solid var(--separator)", paddingTop: 12, marginTop: 0 }}
-        onClick={(e) => e.preventDefault()}>
-        <button
-          type="button"
-          className="ps-btn ps-btn--secondary ps-btn--sm"
-          style={{ flex: 1 }}
-          onClick={(e) => { e.preventDefault(); onClone(program); }}
-          disabled={cloning}
-        >
-          {cloning ? <Loader2 size={13} className="ps-spin" /> : <Copy size={13} />}
-          {isGlobal ? "Use template" : "Duplicate"}
+      <div className="db-plan-foot">
+        <button type="button" className="ps-btn ps-btn--secondary ps-btn--sm" onClick={onClone} disabled={busy}>
+          {busy ? <Loader2 size={14} className="ps-spin" /> : <Copy size={14} />}
+          <span>{isGlobal ? "Use template" : "Duplicate"}</span>
         </button>
         {!isGlobal && (
-          <button
-            type="button"
-            className="ps-btn ps-btn--secondary ps-btn--sm"
-            style={{ color: "var(--red)", width: 32, padding: 0, flexShrink: 0 }}
-            onClick={(e) => { e.preventDefault(); onDelete(program); }}
-          >
-            <Trash2 size={13} />
-          </button>
+          <button type="button" className="db-icon-btn" aria-label={`Delete ${p.name}`} onClick={onDelete}><Trash2 size={15} /></button>
         )}
       </div>
-    </Link>
+    </article>
   )
 }
 
-// ── Page ───────────────────────────────────────────────────────────────────
-
 export default function WorkoutsPage() {
   const router = useRouter()
-  const [orgId, setOrgId] = useState("")
-  const [tab, setTab] = useState<"mine" | "templates">("mine")
-  const [myPlans, setMyPlans] = useState<WorkoutProgram[]>([])
+  const [ctx, setCtx] = useState<{ orgId: string; userId: string } | null>(null)
+  const [tab, setTab] = useState<Tab>("mine")
+  const [mine, setMine] = useState<WorkoutProgram[]>([])
   const [templates, setTemplates] = useState<WorkoutProgram[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [goalFilter, setGoalFilter] = useState<WorkoutGoal | "all">("all")
-  const [cloningId, setCloningId] = useState<string | null>(null)
-
-  const load = useCallback(async (oid: string) => {
-    // Fetch my gym's plans + their active assignment counts
-    const { data: mine } = await supabase
-      .from("workout_programs")
-      .select("*")
-      .eq("org_id", oid)
-      .order("created_at", { ascending: false })
-
-    const myList = (mine as WorkoutProgram[]) || []
-
-    // Count active assignments per program
-    if (myList.length > 0) {
-      const { data: counts } = await supabase
-        .from("member_workout_programs")
-        .select("program_id")
-        .in("program_id", myList.map((p) => p.id))
-        .eq("status", "active")
-
-      const countMap: Record<string, number> = {}
-      for (const row of (counts as { program_id: string }[]) || []) {
-        countMap[row.program_id] = (countMap[row.program_id] ?? 0) + 1
-      }
-      myList.forEach((p) => { p.assigned_count = countMap[p.id] ?? 0 })
-    }
-
-    setMyPlans(myList)
-
-    // Global templates (org_id null)
-    const { data: tmpl } = await supabase
-      .from("workout_programs")
-      .select("*")
-      .is("org_id", null)
-      .eq("is_template", true)
-      .order("goal")
-      .order("name")
-
-    setTemplates((tmpl as WorkoutProgram[]) || [])
-    setLoading(false)
-  }, [])
+  const [goal, setGoal] = useState<WorkoutGoal | "all">("all")
+  const [busyId, setBusyId] = useState<string | null>(null)
 
   useEffect(() => {
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-      const { data: roleData } = await supabase.from("user_roles").select("org_id").eq("user_id", user.id).single()
-      if (!roleData?.org_id) return
-      setOrgId(roleData.org_id)
-      await load(roleData.org_id)
+      const c = await loadOrgContext()
+      if (!c) { setLoading(false); return }
+      setCtx({ orgId: c.orgId, userId: c.userId })
+
+      const [{ data: own }, { data: tmpl }] = await Promise.all([
+        supabase.from("workout_programs").select("*").eq("org_id", c.orgId).order("created_at", { ascending: false }),
+        supabase.from("workout_programs").select("*").is("org_id", null).eq("is_template", true).order("goal").order("name"),
+      ])
+      const list = (own as WorkoutProgram[]) ?? []
+      if (list.length) {
+        const { data: rows } = await supabase.from("member_workout_programs")
+          .select("program_id").in("program_id", list.map((p) => p.id)).eq("status", "active")
+        const counts: Record<string, number> = {}
+        ;((rows as { program_id: string }[]) ?? []).forEach((r) => { counts[r.program_id] = (counts[r.program_id] ?? 0) + 1 })
+        list.forEach((p) => { p.assigned_count = counts[p.id] ?? 0 })
+      }
+      setMine(list)
+      setTemplates((tmpl as WorkoutProgram[]) ?? [])
+      setLoading(false)
     }
     init()
-  }, [load])
+  }, [])
 
-  async function handleClone(program: WorkoutProgram) {
-    if (!orgId) return
-    setCloningId(program.id)
+  async function handleClone(p: WorkoutProgram) {
+    if (!ctx) return
+    setBusyId(p.id)
     try {
-      // Clone the program
-      const { data: newProg, error: progErr } = await supabase
-        .from("workout_programs")
-        .insert({
-          org_id: orgId,
-          name: `${program.name} (copy)`,
-          goal: program.goal,
-          difficulty: program.difficulty,
-          days_per_week: program.days_per_week,
-          duration_weeks: program.duration_weeks,
-          is_template: false,
-          notes: program.notes,
-          status: "active",
-        })
-        .select("id")
-        .single()
-
-      if (progErr || !newProg) throw new Error(progErr?.message ?? "Clone failed")
-
-      // Clone days
-      const { data: days } = await supabase
-        .from("workout_program_days")
-        .select("*")
-        .eq("program_id", program.id)
-        .order("day_number")
-
-      if (days && days.length > 0) {
-        for (const day of days as { id: string; day_number: number; day_name: string; focus: string }[]) {
-          const { data: newDay } = await supabase
-            .from("workout_program_days")
-            .insert({ program_id: newProg.id, day_number: day.day_number, day_name: day.day_name, focus: day.focus })
-            .select("id")
-            .single()
-
-          if (!newDay) continue
-
-          // Clone items for this day
-          const { data: items } = await supabase
-            .from("workout_program_items")
-            .select("*")
-            .eq("day_id", day.id)
-            .order("sort_order")
-
-          if (items && items.length > 0) {
-            await supabase.from("workout_program_items").insert(
-              (items as { exercise_id: string; sort_order: number; sets: number; reps: string; weight_kg: number | null; rest_sec: number; notes: string | null }[]).map((it) => ({
-                day_id: newDay.id,
-                exercise_id: it.exercise_id,
-                sort_order: it.sort_order,
-                sets: it.sets,
-                reps: it.reps,
-                weight_kg: it.weight_kg,
-                rest_sec: it.rest_sec,
-                notes: it.notes,
-              }))
-            )
-          }
-        }
-      }
-
-      router.push(`/dashboard/workouts/${newProg.id}`)
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Couldn't clone the plan")
-    } finally {
-      setCloningId(null)
+      const id = await clonePlan(p.id, ctx.orgId, ctx.userId)
+      router.push(`/dashboard/workouts/${id}/edit`)
+    } catch (e) {
+      alert(e instanceof Error ? e.message : "Couldn't copy the plan")
+      setBusyId(null)
     }
   }
 
-  async function handleDelete(program: WorkoutProgram) {
-    if (!confirm(`Delete "${program.name}"? This cannot be undone.`)) return
-    const { error } = await supabase.from("workout_programs").delete().eq("id", program.id)
+  async function handleDelete(p: WorkoutProgram) {
+    if ((p.assigned_count ?? 0) > 0) {
+      alert(`${p.assigned_count} member${p.assigned_count === 1 ? " is" : "s are"} on "${p.name}". Move them to another plan first.`)
+      return
+    }
+    if (!confirm(`Delete "${p.name}"? This can't be undone.`)) return
+    const { error } = await supabase.from("workout_programs").delete().eq("id", p.id).eq("org_id", ctx?.orgId ?? "")
     if (error) { alert("Couldn't delete: " + error.message); return }
-    setMyPlans((prev) => prev.filter((p) => p.id !== program.id))
+    setMine((prev) => prev.filter((x) => x.id !== p.id))
   }
 
-  // ── Filtering ──
+  const list = tab === "mine" ? mine : templates
+  const filtered = useMemo(() => list.filter((p) =>
+    (!search || p.name.toLowerCase().includes(search.toLowerCase())) && (goal === "all" || p.goal === goal)
+  ), [list, search, goal])
 
-  const activeList = tab === "mine" ? myPlans : templates
-
-  const filtered = activeList.filter((p) => {
-    const matchesSearch = !search || p.name.toLowerCase().includes(search.toLowerCase())
-    const matchesGoal = goalFilter === "all" || p.goal === goalFilter
-    return matchesSearch && matchesGoal
-  })
-
-  const GOALS = Object.keys(GOAL_LABELS) as WorkoutGoal[]
-
-  // ── Stats for "mine" tab ──
-  const totalPlans = myPlans.length
-  const totalAssigned = myPlans.reduce((t, p) => t + (p.assigned_count ?? 0), 0)
-  const yourTemplates = myPlans.filter((p) => p.is_template).length
+  const onPlan = mine.reduce((s, p) => s + (p.assigned_count ?? 0), 0)
+  const yourTemplates = mine.filter((p) => p.is_template).length
 
   return (
-    <div className="ps-page">
-      <header className="ps-header">
-        <div className="ps-header-text">
-          <h1 className="ps-title">Workouts</h1>
-          <p className="ps-subtitle">
-            {loading ? "\u00a0" : `${totalPlans} plan${totalPlans !== 1 ? "s" : ""} · ${totalAssigned} active assignments`}
+    <div className="ps-page db">
+      <DesignStyles />
+
+      <header className="db-header">
+        <div style={{ minWidth: 0 }}>
+          <div className="db-kicker">Coaching</div>
+          <h1 className="db-title">Workouts</h1>
+          <p className="db-subtitle">
+            {loading ? "\u00a0" : <><strong>{mine.length}</strong> plan{mine.length === 1 ? "" : "s"} · <strong>{onPlan}</strong> member{onPlan === 1 ? "" : "s"} training on them</>}
           </p>
         </div>
-        <div className="ps-header-actions">
-          <Link href="/dashboard/workouts/new" className="ps-btn ps-btn--primary">
-            <Plus size={16} /> New plan
-          </Link>
+        <div className="db-header-actions">
+          <Link href="/dashboard/workouts/exercises" className="ps-btn ps-btn--secondary"><Library size={16} /><span>Exercises</span></Link>
+          <Link href="/dashboard/workouts/new" className="ps-btn ps-btn--primary"><Plus size={16} strokeWidth={2.4} /><span>New plan</span></Link>
         </div>
       </header>
 
-      {/* KPI strip — only on "mine" tab */}
-      {!loading && tab === "mine" && (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: 12, marginBottom: 20 }}>
-          {[
-            { label: "Total plans", value: totalPlans },
-            { label: "Active assignments", value: totalAssigned },
-            { label: "Your templates", value: yourTemplates },
-          ].map((k) => (
-            <div key={k.label} className="ps-card" style={{ padding: "14px 18px" }}>
-              <div style={{ fontSize: 12, color: "var(--text-tertiary)", fontWeight: 500 }}>{k.label}</div>
-              <div style={{ fontSize: 26, fontWeight: 700, marginTop: 4, fontVariantNumeric: "tabular-nums" }}>{k.value}</div>
-            </div>
-          ))}
+      <div className="db-card db-statbar">
+        <div className="db-stat db-tone-purple">
+          <span className="db-chip"><Dumbbell size={16} /></span>
+          <div style={{ minWidth: 0 }}><div className="db-stat-label">Your plans</div><div className="db-stat-value">{loading ? "–" : mine.length}</div></div>
         </div>
-      )}
-
-      {/* Tabs */}
-      <div style={{ display: "flex", gap: 2, borderBottom: "1px solid var(--separator)", marginBottom: 18 }}>
-        {([
-          { key: "mine" as const, label: "My plans", count: myPlans.length },
-          { key: "templates" as const, label: "Global templates", count: templates.length },
-        ]).map((t) => (
-          <button key={t.key} type="button" onClick={() => setTab(t.key)}
-            style={{
-              padding: "9px 16px", border: "none", borderBottom: tab === t.key ? "2px solid var(--accent)" : "2px solid transparent",
-              marginBottom: -1, background: "none", cursor: "pointer", fontSize: 14, fontFamily: "inherit",
-              fontWeight: tab === t.key ? 650 : 500,
-              color: tab === t.key ? "var(--accent)" : "var(--text-secondary)",
-              display: "flex", alignItems: "center", gap: 7,
-            }}>
-            {t.label}
-            <span style={{ fontSize: 11.5, fontWeight: 600, padding: "1px 7px", borderRadius: 10,
-              background: tab === t.key ? "var(--accent-dim)" : "var(--fill-2)",
-              color: tab === t.key ? "var(--accent)" : "var(--text-tertiary)",
-            }}>
-              {t.count}
-            </span>
-          </button>
-        ))}
+        <div className="db-stat db-tone-green">
+          <span className="db-chip"><Users size={16} /></span>
+          <div style={{ minWidth: 0 }}><div className="db-stat-label">Members on a plan</div><div className="db-stat-value">{loading ? "–" : onPlan}</div></div>
+        </div>
+        <div className="db-stat db-tone-blue">
+          <span className="db-chip"><Layers size={16} /></span>
+          <div style={{ minWidth: 0 }}><div className="db-stat-label">Your templates</div><div className="db-stat-value">{loading ? "–" : yourTemplates}</div></div>
+        </div>
+        <div className="db-stat db-tone-blue">
+          <span className="db-chip"><Library size={16} /></span>
+          <div style={{ minWidth: 0 }}><div className="db-stat-label">Built-in templates</div><div className="db-stat-value">{loading ? "–" : templates.length}</div></div>
+        </div>
       </div>
 
-      {/* Toolbar */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
-        <div className="ps-input-wrap" style={{ flex: 1, minWidth: 200 }}>
-          <span className="ps-input-icon"><Search size={16} /></span>
-          <input
-            className="ps-input ps-input--icon"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search plans..."
-            style={{ height: 38 }}
-          />
+      <div className="db-card db-toolbar">
+        <div className="dz-tabs db-segtabs" role="tablist">
+          <button type="button" role="tab" aria-selected={tab === "mine"} className="dz-tab" onClick={() => setTab("mine")}>Your plans <span>{mine.length}</span></button>
+          <button type="button" role="tab" aria-selected={tab === "templates"} className="dz-tab" onClick={() => setTab("templates")}>Templates <span>{templates.length}</span></button>
         </div>
-        <select
-          className="ps-input"
-          value={goalFilter}
-          onChange={(e) => setGoalFilter(e.target.value as WorkoutGoal | "all")}
-          style={{ height: 38, fontSize: 13, width: "auto", minWidth: 150 }}
-        >
+        <div className="db-search">
+          <Search size={16} />
+          <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search plans" aria-label="Search plans" />
+        </div>
+        <select className="db-select" value={goal} onChange={(e) => setGoal(e.target.value as WorkoutGoal | "all")} aria-label="Goal">
           <option value="all">All goals</option>
-          {GOALS.map((g) => <option key={g} value={g}>{GOAL_LABELS[g]}</option>)}
+          {(Object.keys(GOAL_LABELS) as WorkoutGoal[]).map((g) => <option key={g} value={g}>{GOAL_LABELS[g]}</option>)}
         </select>
       </div>
 
-      {/* Content */}
       {loading ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 14 }}>
-          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} w="100%" h={170} r={16} />)}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="ps-card ps-empty">
-          <div className="ps-empty-icon"><Dumbbell size={22} /></div>
-          <div className="ps-empty-title">
-            {tab === "mine"
-              ? myPlans.length === 0 ? "No workout plans yet" : "No plans match"
-              : "No templates match"}
+        <div className="db-plans">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} w="100%" h={210} r={20} />)}</div>
+      ) : filtered.length === 0 && !(tab === "mine" && mine.length === 0) ? (
+        <div className="db-card db-pad">
+          <div className="db-empty">
+            <div className="db-empty-icon"><Search size={18} /></div>
+            <div className="db-empty-title">Nothing matches</div>
+            <div className="db-empty-text">Try a different search or goal.</div>
           </div>
-          <div className="ps-empty-text">
-            {tab === "mine" && myPlans.length === 0
-              ? "Build your first plan and assign it to members."
-              : "Try a different search or goal filter."}
-          </div>
-          {tab === "mine" && myPlans.length === 0 && (
-            <Link href="/dashboard/workouts/new" className="ps-btn ps-btn--primary">
-              <Plus size={16} /> New plan
-            </Link>
-          )}
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px,1fr))", gap: 14 }}>
+        <div className="db-plans">
           {filtered.map((p) => (
-            <ProgramCard
-              key={p.id}
-              program={p}
-              isGlobal={p.org_id === null}
-              onClone={handleClone}
-              onDelete={handleDelete}
-              cloning={cloningId === p.id}
-            />
+            <PlanCard key={p.id} p={p} isGlobal={!p.org_id} busy={busyId === p.id}
+              onClone={() => handleClone(p)} onDelete={() => handleDelete(p)} />
           ))}
+          {tab === "mine" && (
+            <Link href="/dashboard/workouts/new" className="db-plan-add" style={{ textDecoration: "none" }}>
+              <span className="db-empty-icon"><Plus size={18} /></span>
+              <span style={{ fontSize: 14.5, fontWeight: 600 }}>{mine.length ? "New plan" : "Build your first plan"}</span>
+              <span style={{ fontSize: 12.5, color: "var(--text-tertiary)" }}>{mine.length ? "Start from scratch" : "Or start from a template"}</span>
+            </Link>
+          )}
         </div>
       )}
     </div>
