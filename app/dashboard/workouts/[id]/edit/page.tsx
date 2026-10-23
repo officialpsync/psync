@@ -7,6 +7,7 @@ import Link from "next/link"
 import { useParams } from "next/navigation"
 import { ChevronLeft, Dumbbell } from "lucide-react"
 import { DesignStyles } from "../../../components/DesignSystem"
+import { WorkoutStyles } from "../../components/WorkoutTheme"
 import { Skeleton } from "../../../components/ui"
 import type { WorkoutExercise, WorkoutGoal, Difficulty } from "@/lib/workout/types"
 import { PlanBuilder, type PlanDraft } from "../../components/PlanBuilder"
@@ -63,8 +64,8 @@ export default function EditWorkoutPlanPage() {
 
   if (notFound) {
     return (
-      <div className="ps-page ps-page--narrow db">
-        <DesignStyles />
+      <div className="ps-page db wk">
+        <DesignStyles /><WorkoutStyles />
         <Link href="/dashboard/workouts" className="db-back"><ChevronLeft size={18} />Workouts</Link>
         <div className="db-card db-pad">
           <div className="db-empty">
@@ -79,8 +80,8 @@ export default function EditWorkoutPlanPage() {
 
   if (!draft) {
     return (
-      <div className="ps-page ps-page--narrow db">
-        <DesignStyles />
+      <div className="ps-page db wk">
+        <DesignStyles /><WorkoutStyles />
         <Skeleton w={90} h={16} />
         <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 16 }}>
           <Skeleton w={220} h={34} />

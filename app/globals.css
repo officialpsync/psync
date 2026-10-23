@@ -295,12 +295,14 @@ button, input, select, textarea { font-family: inherit; }
 /* ==========================================================================
    Page scaffolding
    ========================================================================== */
+/* One gutter for every module (matches Leads): full width, 14px top, 18px sides. */
 .ps-page {
   flex: 1; min-width: 0; width: 100%;
-  max-width: 1160px; margin: 0 auto;
-  padding: 44px 44px 72px;
+  max-width: none; margin: 0;
+  padding: 14px 18px 24px;
 }
-.ps-page--narrow { max-width: 780px; }
+/* Forms keep a readable line length but sit on the same left edge as every other page. */
+.ps-page--narrow { max-width: 816px; }
 
 .ps-header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
 .ps-header-text { min-width: 0; }
@@ -315,10 +317,10 @@ button, input, select, textarea { font-family: inherit; }
 .ps-section-meta { font-size: 13px; color: var(--text-tertiary); }
 
 @media (max-width: 899px) {
-  .ps-page { padding: 20px 24px 40px; }
+  .ps-page { padding: 14px 18px 24px; }
 }
 @media (max-width: 640px) {
-  .ps-page { padding: 12px 16px 32px; }
+  .ps-page { padding: 10px 10px 20px; }
   .ps-header { margin-bottom: 20px; align-items: center; }
   .ps-title { font-size: 28px; }
   .ps-subtitle { font-size: 14px; margin-top: 4px; }

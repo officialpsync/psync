@@ -11,6 +11,7 @@ import { supabase } from "@/lib/supabase"
 import { BackLink, Skeleton, useToast } from "../../../../components/ui"
 import { Sheet } from "../../../../components/Sheet"
 import { DesignStyles } from "../../../../components/DesignSystem"
+import { DietStyles } from "../../../components/DietTheme"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -449,8 +450,8 @@ export default function TemplateBuilderPage() {
 
   if (loading) {
     return (
-      <div className="ps-page ps-page--narrow db">
-        <DesignStyles />
+      <div className="ps-page db dt">
+        <DesignStyles /><DietStyles />
         <Skeleton w={80} h={16} />
         <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 14 }}>
           <Skeleton w={300} h={36} r={10} />
@@ -464,8 +465,8 @@ export default function TemplateBuilderPage() {
 
   if (!meta) {
     return (
-      <div className="ps-page ps-page--narrow db">
-        <DesignStyles />
+      <div className="ps-page db dt">
+        <DesignStyles /><DietStyles />
         <BackLink onClick={() => router.back()} label="Back" />
         <div className="db-card db-pad">
           <div className="db-empty">
@@ -479,8 +480,8 @@ export default function TemplateBuilderPage() {
   }
 
   return (
-    <div className="ps-page ps-page--narrow db">
-      <DesignStyles />
+    <div className="ps-page db dt">
+      <DesignStyles /><DietStyles />
       <BackLink onClick={() => router.push("/dashboard/diet/templates")} label="Templates" />
 
       <header className="db-header">

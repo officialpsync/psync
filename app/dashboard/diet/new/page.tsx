@@ -1,4 +1,5 @@
 "use client"
+// app/dashboard/diet/new/page.tsx
 
 import { useEffect, useRef, useState } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -6,6 +7,7 @@ import { ChefHat, Dumbbell, Salad, Search, Check, Loader2 } from "lucide-react"
 import { supabase } from "@/lib/supabase"
 import { Avatar, BackLink, Segmented } from "../../components/ui"
 import { DesignStyles } from "../../components/DesignSystem"
+import { DietStyles } from "../components/DietTheme"
 
 type PlanMode = "protein_heavy" | "ingredient" | "manual"
 
@@ -280,8 +282,8 @@ export default function GeneratePlanPage() {
   }
 
   return (
-    <div className="ps-page ps-page--narrow db">
-      <DesignStyles />
+    <div className="ps-page db dt">
+      <DesignStyles /><DietStyles />
       <BackLink onClick={() => router.back()} label="Back" />
 
       <header className="db-header">

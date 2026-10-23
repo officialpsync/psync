@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase";
-import { Plus, Ticket, Eye, EyeOff, IndianRupee, Users, Pencil, CalendarClock, Repeat } from "lucide-react";
+import { Plus, Ticket, Eye, EyeOff, IndianRupee, Users, Pencil, CalendarClock, Repeat, Search, Copy, Award, Check } from "lucide-react";
 import { formatINR, Segmented, Skeleton, useToast } from "../components/ui";
 import { Sheet } from "../components/Sheet";
 import { DesignStyles } from "../components/DesignSystem";
@@ -22,7 +22,6 @@ const PRESETS = [
   { label: "1 year", days: 365 },
 ];
 
-const TONES = ["blue", "green", "purple", "amber"] as const;
 
 const EMPTY = { name: "", description: "", duration_days: "30", price: "", plan_type: "duration" as PlanType };
 
@@ -47,6 +46,10 @@ export default function MembershipPlansPage() {
   const [form, setForm] = useState(EMPTY);
   const [saving, setSaving] = useState(false);
   const { toast, show } = useToast();
+  const [view, setView] = useState<"all" | "active" | "hidden">("all");
+  const [typeF, setTypeF] = useState<"" | PlanType>("");
+  const [sort, setSort] = useState<"popular" | "price" | "length" | "new">("popular");
+  const [q, setQ] = useState("");
 
   async function load(oid: string) {
     const [{ data }, { data: ms }] = await Promise.all([
@@ -115,6 +118,12 @@ export default function MembershipPlansPage() {
     show(editPlan ? "Plan updated" : "Plan created");
   }
 
+  function duplicate(p: Plan) {
+    setEditPlan(null);
+    setForm({ name: `${p.name} (copy)`, description: p.description || "", duration_days: String(p.duration_days), price: String(p.price_paise / 100), plan_type: p.plan_type === "session" ? "session" : "duration" });
+    setShowForm(true);
+  }
+
   async function toggleActive(p: Plan) {
     const next = !p.is_active;
     setPlans((prev) => prev.map((pl) => (pl.id === p.id ? { ...pl, is_active: next } : pl)));
@@ -133,131 +142,112 @@ export default function MembershipPlansPage() {
     return { active: active.length, hidden: plans.length - active.length, members, mrr, top: top && memberCounts[top.id] ? top : null };
   }, [plans, memberCounts]);
 
-  return (
-    <div className="ps-page db">
-      <DesignStyles />
+  const term = q.trim().toLowerCase();
+  const shown = plans.filter((p) =>
+    (view === "all" || (view === "active" ? p.is_active : !p.is_active)) &&
+    (!typeF || (p.plan_type ?? "duration") === typeF) &&
+    (!term || p.name.toLowerCase().includes(term) || (p.description ?? "").toLowerCase().includes(term))
+  ).sort((a, b) => sort === "popular" ? (memberCounts[b.id] || 0) - (memberCounts[a.id] || 0)
+    : sort === "price" ? a.price_paise - b.price_paise : sort === "length" ? a.duration_days - b.duration_days : b.created_at.localeCompare(a.created_at));
+  // Best value: lowest price per day among active, time-based plans
+  const bestValue = plans.filter((p) => p.is_active && p.plan_type !== "session" && p.duration_days >= 60)
+    .sort((a, b) => a.price_paise / a.duration_days - b.price_paise / b.duration_days)[0]?.id;
+  const maxCount = Math.max(1, ...Object.values(memberCounts));
 
-      {/* Header */}
-      <header className="db-header">
-        <div style={{ minWidth: 0 }}>
-          <div className="db-kicker">Business</div>
-          <h1 className="db-title">Membership plans</h1>
-          <p className="db-subtitle">
-            {loading ? "\u00a0" : <><strong>{stats.active}</strong> plan{stats.active === 1 ? "" : "s"} available to new members</>}
-          </p>
+  return (
+    <div className="ps-page db mpl">
+      <DesignStyles />
+      <style>{MPL_CSS}</style>
+
+      <header className="mpl-head">
+        <div className="mpl-title">
+          <span className="mpl-title-icon"><Ticket size={21} /></span>
+          <div>
+            <h1>Membership plans</h1>
+            <p>{loading ? "\u00a0" : `${stats.active} plan${stats.active === 1 ? "" : "s"} available to new members${stats.hidden ? ` · ${stats.hidden} hidden` : ""}`}</p>
+          </div>
         </div>
-        <div className="db-header-actions">
-          <button type="button" className="ps-btn ps-btn--primary" onClick={openNew}>
-            <Plus size={16} strokeWidth={2.4} /> <span>New plan</span>
-          </button>
+        <div className="mpl-actions">
+          <button type="button" className="ps-btn ps-btn--primary" onClick={openNew}><Plus size={16} strokeWidth={2.4} /><span>New plan</span></button>
+        </div>
+        <div className="mpl-kpis">
+          <div className="mpl-kpi"><span className="mpl-kpi-icon"><Eye size={15} /></span><div><small>Available</small><b>{loading ? "–" : stats.active}</b></div></div>
+          <div className="mpl-kpi"><span className="mpl-kpi-icon"><Users size={15} /></span><div><small>Members on a plan</small><b>{loading ? "–" : stats.members}</b></div></div>
+          <div className="mpl-kpi"><span className="mpl-kpi-icon"><IndianRupee size={15} /></span><div><small>Monthly value</small><b>{loading ? "–" : formatINR(stats.mrr)}</b></div></div>
+          <div className="mpl-kpi"><span className="mpl-kpi-icon"><Award size={15} /></span><div><small>Most popular</small><b>{loading ? "–" : stats.top ? stats.top.name : "—"}</b></div></div>
         </div>
       </header>
 
-      {/* Summary — one compact bar, so it doesn't compete with the plan cards */}
-      <div className="db-card db-statbar">
-        <div className="db-stat db-tone-blue">
-          <span className="db-chip"><Eye size={15} strokeWidth={2.3} /></span>
-          <div style={{ minWidth: 0 }}>
-            <div className="db-stat-label">Available</div>
-            <div className="db-stat-value">{loading ? <Skeleton w={30} h={20} /> : <>{stats.active}<span className="db-stat-note">{stats.hidden} hidden</span></>}</div>
-          </div>
-        </div>
-        <div className="db-stat db-tone-green">
-          <span className="db-chip"><Users size={15} strokeWidth={2.3} /></span>
-          <div style={{ minWidth: 0 }}>
-            <div className="db-stat-label">Members on a plan</div>
-            <div className="db-stat-value">{loading ? <Skeleton w={30} h={20} /> : stats.members}</div>
-          </div>
-        </div>
-        <div className="db-stat db-tone-purple">
-          <span className="db-chip"><IndianRupee size={15} strokeWidth={2.3} /></span>
-          <div style={{ minWidth: 0 }}>
-            <div className="db-stat-label">Monthly value</div>
-            <div className="db-stat-value">{loading ? <Skeleton w={70} h={20} /> : formatINR(stats.mrr)}</div>
-          </div>
-        </div>
-        <div className="db-stat db-tone-amber">
-          <span className="db-chip"><Ticket size={15} strokeWidth={2.3} /></span>
-          <div style={{ minWidth: 0 }}>
-            <div className="db-stat-label">Most popular</div>
-            <div className="db-stat-value">{loading ? <Skeleton w={70} h={20} /> : stats.top ? stats.top.name : "—"}</div>
-          </div>
-        </div>
-      </div>
-
       {!loading && plans.length > 0 && (
-        <div className="db-section-head">
-          <h2 className="db-section-title" style={{ margin: 0 }}>Your plans</h2>
-          <span className="db-card-sub" style={{ marginTop: 0 }}>{plans.length} total</span>
+        <div className="mpl-toolbar">
+          <div className="mpl-seg" role="tablist">
+            {([["all", "All", plans.length], ["active", "Available", stats.active], ["hidden", "Hidden", stats.hidden]] as const).map(([k, l, n]) => (
+              <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)}>{l} <span>{n}</span></button>
+            ))}
+          </div>
+          <div className="mpl-seg">
+            {([["", "Any type"], ["duration", "Time based"], ["session", "Session based"]] as const).map(([k, l]) => (
+              <button key={l} type="button" aria-selected={typeF === k} onClick={() => setTypeF(k)}>{l}</button>
+            ))}
+          </div>
+          <label className="mpl-search"><Search size={16} /><input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search plans" aria-label="Search plans" /></label>
+          <select className="mpl-select" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort">
+            <option value="popular">Most members</option><option value="price">Price: low to high</option>
+            <option value="length">Length: short to long</option><option value="new">Newest</option>
+          </select>
         </div>
       )}
 
-      {/* Plans */}
       {loading ? (
-        <div className="db-plans">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} w="100%" h={220} r={20} />)}
-        </div>
+        <div className="mpl-grid">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} w="100%" h={280} r={18} />)}</div>
       ) : plans.length === 0 ? (
-        <div className="db-card db-pad">
-          <div className="db-empty" style={{ padding: "40px 16px" }}>
-            <span className="db-empty-icon"><Ticket size={18} /></span>
-            <div className="db-empty-title">No plans yet</div>
-            <div className="db-empty-text">Create a plan like “Monthly” or “Annual” so you can assign it to members.</div>
-            <button type="button" className="ps-btn ps-btn--primary" style={{ marginTop: 14 }} onClick={openNew}>
-              <Plus size={16} /> New plan
-            </button>
-          </div>
+        <div className="mpl-empty">
+          <span className="mpl-empty-icon"><Ticket size={20} /></span>
+          <strong>No plans yet</strong>
+          <p>Create a plan like &ldquo;Monthly&rdquo; or &ldquo;Annual&rdquo; so you can assign it to members.</p>
+          <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" onClick={openNew}><Plus size={14} /> New plan</button>
         </div>
       ) : (
-        <div className="db-plans">
-          {plans.map((p, i) => {
-            const tone = TONES[i % TONES.length];
+        <div className="mpl-grid">
+          {shown.map((p) => {
             const count = memberCounts[p.id] || 0;
             const monthly = perMonth(p);
+            const share = stats.members ? Math.round((count / stats.members) * 100) : 0;
             return (
-              <article key={p.id} className={`db-card db-plan db-tone-${tone}`} data-inactive={!p.is_active}>
-                <div className="db-plan-head">
-                  <span className="db-chip db-chip--lg">
-                    {p.plan_type === "session" ? <Repeat size={18} /> : <CalendarClock size={18} />}
-                  </span>
-                  <div style={{ minWidth: 0, flex: 1 }}>
-                    <div className="db-plan-name">{p.name}</div>
-                    <div className="db-card-sub">{p.plan_type === "session" ? "Session based" : "Time based"} · {p.duration_days} days</div>
+              <article key={p.id} className="mpl-card" data-off={!p.is_active}>
+                <div className="mpl-band">
+                  <span className="mpl-band-icon">{p.plan_type === "session" ? <Repeat size={17} /> : <CalendarClock size={17} />}</span>
+                  <span className="mpl-band-kind">{p.plan_type === "session" ? "Session based" : "Time based"} · {p.duration_days} days</span>
+                  {p.id === bestValue && <span className="mpl-badge"><Award size={11} />Best value</span>}
+                  {!p.is_active && <span className="mpl-badge mpl-badge--off"><EyeOff size={11} />Hidden</span>}
+                </div>
+                <div className="mpl-body">
+                  <h3>{p.name}</h3>
+                  <div className="mpl-price">{formatINR(p.price_paise)}<span>/ {periodLabel(p.duration_days)}</span></div>
+                  <div className="mpl-sub">{monthly !== null ? `≈ ${formatINR(monthly)} a month · ` : ""}{formatINR(Math.round(p.price_paise / Math.max(1, p.duration_days)))} a day</div>
+                  {p.description && <p className="mpl-desc">{p.description}</p>}
+                  <div className="mpl-members">
+                    <div><Users size={13} /><b>{count}</b> active member{count === 1 ? "" : "s"}<em>{share}% of members</em></div>
+                    <span className="mpl-bar"><i style={{ width: `${(count / maxCount) * 100}%` }} /></span>
                   </div>
-                  {!p.is_active && <span className="db-pill db-pill--muted"><EyeOff size={11} /> Hidden</span>}
                 </div>
-
-                <div className="db-plan-price">
-                  {formatINR(p.price_paise)}
-                  <span className="db-plan-per">/ {periodLabel(p.duration_days)}</span>
-                </div>
-                {monthly !== null && <div className="db-card-sub">≈ {formatINR(monthly)} a month</div>}
-
-                {p.description && <p className="db-plan-desc">{p.description}</p>}
-
-                <div className="db-plan-members">
-                  <Users size={14} />
-                  <span><strong>{count}</strong> active member{count === 1 ? "" : "s"}</span>
-                </div>
-
-                <div className="db-plan-foot">
-                  <label className="db-plan-toggle">
+                <div className="mpl-foot">
+                  <label className="mpl-toggle">
                     <input type="checkbox" className="db-switch" checked={p.is_active} onChange={() => toggleActive(p)} aria-label={`${p.name} available`} />
                     <span>{p.is_active ? "Available" : "Hidden"}</span>
                   </label>
-                  <button type="button" className="ps-btn ps-btn--secondary ps-btn--sm" onClick={() => openEdit(p)}>
-                    <Pencil size={13} /> Edit
-                  </button>
+                  <button type="button" className="mpl-icon" title="Duplicate" aria-label={`Duplicate ${p.name}`} onClick={() => duplicate(p)}><Copy size={15} /></button>
+                  <button type="button" className="mpl-btn" onClick={() => openEdit(p)}><Pencil size={13} />Edit</button>
                 </div>
               </article>
             );
           })}
-
-          <button type="button" className="db-plan-add" onClick={openNew}>
-            <span className="db-empty-icon"><Plus size={18} /></span>
-            <span className="db-plan-name">New plan</span>
-            <span className="db-card-sub">Monthly, annual, couple, student…</span>
-          </button>
+          {view !== "hidden" && (
+            <button type="button" className="mpl-add" onClick={openNew}>
+              <span><Plus size={20} /></span><strong>New plan</strong><small>Monthly, annual, couple, student…</small>
+            </button>
+          )}
+          {shown.length === 0 && <div className="mpl-empty" style={{ gridColumn: "1 / -1" }}><strong>No plans match</strong><p>Try another filter or search.</p></div>}
         </div>
       )}
 
@@ -303,7 +293,7 @@ export default function MembershipPlansPage() {
                   aria-pressed={form.duration_days === String(pd.days)}
                   onClick={() => setForm((f) => ({ ...f, duration_days: String(pd.days) }))}
                 >
-                  {pd.label}
+                  {form.duration_days === String(pd.days) && <Check size={12} strokeWidth={3} />}{pd.label}
                 </button>
               ))}
             </div>
@@ -351,3 +341,81 @@ export default function MembershipPlansPage() {
     </div>
   );
 }
+
+// NOTE: no backticks inside this CSS.
+const MPL_CSS = `
+.ps-page.mpl { max-width: none !important; margin: 0 !important; padding: 18px !important; }
+.db.mpl { max-width: none; }
+.mpl { --mpl-line: var(--separator); }
+.mpl-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px 14px; margin-bottom: 14px; }
+.mpl-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.mpl-title-icon { width: 44px; height: 44px; border-radius: 13px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #0a66d6, #3c4fe0); box-shadow: 0 8px 18px -8px rgba(10,102,214,0.6); flex-shrink: 0; }
+.mpl-title h1 { margin: 0; font-size: 24px; font-weight: 750; letter-spacing: -0.025em; }
+.mpl-title p { margin: 1px 0 0; font-size: 13px; color: var(--text-tertiary); }
+.mpl-actions .ps-btn { height: 42px; border-radius: 12px; }
+.mpl-kpis { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.mpl-kpi { display: flex; align-items: center; gap: 9px; height: 52px; padding: 0 12px 0 9px; border-radius: 12px; background: #fff; border: 1px solid var(--mpl-line); min-width: 0; }
+.mpl-kpi-icon { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-dim, #e8f1ff); color: var(--accent); flex-shrink: 0; }
+.mpl-kpi div { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
+.mpl-kpi small { font-size: 12px; font-weight: 600; color: var(--text-tertiary); white-space: nowrap; }
+.mpl-kpi b { font-size: 17px; font-weight: 750; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.mpl-toolbar { position: relative; overflow: hidden; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px; margin-bottom: 14px; border-radius: 16px; background: #fff; border: 1px solid var(--mpl-line); }
+.mpl-toolbar::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, #0a66d6, #3c4fe0); }
+.mpl-seg { display: flex; padding: 3px; border-radius: 11px; background: #f2f3f6; }
+.mpl-seg button { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: none; border-radius: 8px; background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+.mpl-seg button span { font-size: 11.5px; font-weight: 700; color: var(--text-tertiary); }
+.mpl-seg button[aria-selected="true"] { background: #fff; color: var(--accent); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+.mpl-search { position: relative; display: flex; align-items: center; flex: 1; min-width: 180px; }
+.mpl-search > svg { position: absolute; left: 12px; color: var(--text-tertiary); pointer-events: none; }
+.mpl-search input { width: 100%; height: 38px; padding: 0 12px 0 36px; border: 1px solid var(--mpl-line); border-radius: 10px; font: inherit; font-size: 14px; outline: none; }
+.mpl-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.mpl-select { height: 38px; padding: 0 30px 0 12px; border: 1px solid var(--mpl-line); border-radius: 10px; font: inherit; font-size: 13.5px; font-weight: 600; background: #fff; }
+
+.mpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; align-items: stretch; }
+.mpl-card { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--mpl-line); border-radius: 18px; overflow: hidden; transition: box-shadow 160ms, transform 160ms; }
+.mpl-card:hover { box-shadow: 0 14px 30px -16px rgba(10,60,160,0.4); transform: translateY(-2px); }
+.mpl-card[data-off="true"] { opacity: 0.65; }
+.mpl-card[data-off="true"] .mpl-band { background: linear-gradient(120deg, #8e8e93, #aeaeb2); }
+.mpl-band { display: flex; align-items: center; gap: 8px; height: 54px; padding: 0 14px; color: #fff; background: radial-gradient(160px 80px at 90% -20%, rgba(255,255,255,0.3), transparent 70%), linear-gradient(120deg, #0a66d6, #3c4fe0); }
+.mpl-band-icon { width: 32px; height: 32px; border-radius: 10px; display: grid; place-items: center; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); flex-shrink: 0; }
+.mpl-band-kind { font-size: 12px; font-weight: 650; opacity: 0.92; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mpl-badge { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 11px; background: #fff; color: #0a66d6; font-size: 11px; font-weight: 750; white-space: nowrap; }
+.mpl-badge--off { color: #6e6e73; }
+.mpl-body { flex: 1; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; }
+.mpl-body h3 { margin: 0; font-size: 16.5px; font-weight: 720; letter-spacing: -0.015em; }
+.mpl-price { font-size: 28px; font-weight: 790; letter-spacing: -0.03em; color: var(--text-primary); }
+.mpl-price span { font-size: 13.5px; font-weight: 600; color: var(--text-tertiary); margin-left: 4px; letter-spacing: 0; }
+.mpl-sub { font-size: 12.5px; color: var(--accent); font-weight: 600; }
+.mpl-desc { margin: 2px 0 0; font-size: 13px; line-height: 1.45; color: var(--text-secondary); }
+.mpl-members { margin-top: auto; padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.mpl-members > div { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-secondary); }
+.mpl-members b { color: var(--text-primary); }
+.mpl-members em { font-style: normal; margin-left: auto; font-size: 12px; color: var(--text-tertiary); }
+.mpl-bar { height: 6px; border-radius: 4px; background: #eef2f8; overflow: hidden; }
+.mpl-bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #0a66d6, #3c4fe0); }
+.mpl-foot { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--mpl-line); background: #fbfbfd; }
+.mpl-toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text-secondary); cursor: pointer; margin-right: auto; }
+.mpl-icon { width: 32px; height: 32px; border: none; border-radius: 9px; background: none; display: grid; place-items: center; color: var(--text-tertiary); cursor: pointer; }
+.mpl-icon:hover { background: #eef2f8; color: var(--accent); }
+.mpl-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--mpl-line); background: #fff; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
+.mpl-btn:hover { border-color: var(--accent); color: var(--accent); }
+.mpl-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 280px; border: 1.5px dashed #c9cfda; border-radius: 18px; background: #fafbff; font: inherit; color: var(--accent); cursor: pointer; }
+.mpl-add:hover { border-color: var(--accent); }
+.mpl-add span { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: linear-gradient(135deg, #0a66d6, #3c4fe0); color: #fff; margin-bottom: 4px; }
+.mpl-add strong { font-size: 15px; } .mpl-add small { font-size: 12.5px; color: var(--text-tertiary); }
+.mpl-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 48px 20px; background: #fff; border: 1px solid var(--mpl-line); border-radius: 18px; }
+.mpl-empty-icon { width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; background: var(--accent-dim, #e8f1ff); color: var(--accent); margin-bottom: 4px; }
+.mpl-empty strong { font-size: 15.5px; } .mpl-empty p { margin: 0 0 8px; font-size: 13.5px; color: var(--text-tertiary); }
+
+@media (max-width: 1000px) { .mpl-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) {
+  .ps-page.mpl { padding: 10px 10px 24px !important; }
+  .mpl-head { grid-template-columns: minmax(0, 1fr); }
+  .mpl-actions .ps-btn { width: 100%; justify-content: center; }
+  .mpl-search { flex-basis: 100%; }
+  .mpl-search input { font-size: 16px; }
+  .mpl-seg { overflow-x: auto; max-width: 100%; }
+  .mpl-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+}
+`

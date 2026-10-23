@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
 import { ChevronLeft, ChevronRight, Loader2, Plus, Users, X, Trash2, CalendarDays, CheckCircle2, Dumbbell } from "lucide-react";
 import { Avatar, formatDate, Segmented, Skeleton, useToast } from "../components/ui";
@@ -703,6 +703,23 @@ function ClassDetailSheet({ cls, bookedFor, orgId, onClose, onUpdated }: {
 }
 
 // ---- Main page ----
+
+// ---- Page ----
+
+type View = "week" | "day" | "agenda";
+
+// Strong, readable colours for class blocks (light fill, solid accent, dark text).
+const BLOCK: Record<ClassColor, { fill: string; accent: string; text: string; soft: string }> = {
+  blue:   { fill: "#e8f1ff", accent: "#0a84ff", text: "#0b4a99", soft: "#cfe2ff" },
+  green:  { fill: "#e7f7ed", accent: "#28b04f", text: "#17672f", soft: "#c6edd3" },
+  amber:  { fill: "#fff3e0", accent: "#ff9f0a", text: "#8a4b00", soft: "#ffe0b0" },
+  red:    { fill: "#ffecef", accent: "#ff375f", text: "#9e0a26", soft: "#ffcbd5" },
+  purple: { fill: "#f4ecfc", accent: "#af52de", text: "#6b2591", soft: "#e4cdf6" },
+  teal:   { fill: "#e4f6f8", accent: "#30b0c7", text: "#0d6676", soft: "#c0e9ef" },
+};
+
+function hourLabel(h: number) { return h === 0 || h === 24 ? "12am" : h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`; }
+
 export default function ClassesPage() {
   const [orgId, setOrgId] = useState<string | null>(null);
   const [branchId, setBranchId] = useState<string | null>(null);
@@ -714,17 +731,37 @@ export default function ClassesPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedClass, setSelectedClass] = useState<GymClass | null>(null);
   const [selectedBookedFor, setSelectedBookedFor] = useState<string>("");
+  const [view, setView] = useState<View>("week");
+  const [dayIdx, setDayIdx] = useState(() => { const d = new Date().getDay(); return d === 0 ? 6 : d - 1; });
+  const [trainer, setTrainer] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
+  const [gridH, setGridH] = useState(0);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // Phones start on the day view; the 7-column week is too narrow there.
+  useEffect(() => { if (window.matchMedia("(max-width: 760px)").matches) setView("day"); }, []);
+  // Current-time line
+  useEffect(() => { const t = window.setInterval(() => setNow(new Date()), 60000); return () => window.clearInterval(t); }, []);
+  // Hour height is computed from the space available, so the whole day fits without scrolling.
+  useEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setGridH(el.clientHeight));
+    ro.observe(el);
+    setGridH(el.clientHeight);
+    return () => ro.disconnect();
+  }, [view, loading]);
 
   const weekStart = getWeekStart(new Date());
   weekStart.setDate(weekStart.getDate() + weekOffset * 7);
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
+  const weekDates = Array.from({ length: 7 }, (_, i) => { const d = new Date(weekStart); d.setDate(d.getDate() + i); return d; });
+  const weekIsos = weekDates.map(toLocalIso);
+  const todayStr = todayIso();
 
-  const isCurrentWeek = weekOffset === 0;
-  const weekLabel = isCurrentWeek ? "This week"
-    : weekOffset === 1 ? "Next week"
-    : weekOffset === -1 ? "Last week"
-    : `${formatDate(weekStart.toISOString().slice(0, 10))} – ${formatDate(weekEnd.toISOString().slice(0, 10))}`;
+  const rangeLabel = `${weekStart.toLocaleDateString("en-IN", { day: "numeric", month: "short" })} – ${weekEnd.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}`;
+  const weekLabel = weekOffset === 0 ? "This week" : weekOffset === 1 ? "Next week" : weekOffset === -1 ? "Last week" : rangeLabel;
 
   const loadData = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -733,46 +770,20 @@ export default function ClassesPage() {
     if (!roleData) return;
     setOrgId(roleData.org_id);
 
-    // Fetch first branch for this org
-    const { data: branchData } = await supabase
-      .from("branches")
-      .select("id")
-      .eq("org_id", roleData.org_id)
-      .limit(1)
-      .single();
+    const { data: branchData } = await supabase.from("branches").select("id").eq("org_id", roleData.org_id).limit(1).single();
     if (branchData) setBranchId(branchData.id);
 
-    // Load all active classes
-    const { data: c } = await supabase
-      .from("classes")
-      .select("id, org_id, name, description, trainer_name, color, schedule_day, start_time, duration_mins, capacity, is_active, recurrence_unit, recurrence_interval, recurrence_start_date, recurrence_end_date")
-      .eq("org_id", roleData.org_id)
-      .eq("is_active", true)
-      .order("start_time");
-
+    const [{ data: c }, { data: b }, { data: ex }] = await Promise.all([
+      supabase.from("classes")
+        .select("id, org_id, name, description, trainer_name, color, schedule_day, start_time, duration_mins, capacity, is_active, recurrence_unit, recurrence_interval, recurrence_start_date, recurrence_end_date")
+        .eq("org_id", roleData.org_id).eq("is_active", true).order("start_time"),
+      // Local dates (not toISOString) so IST doesn't shift bookings onto the previous day
+      supabase.from("class_bookings").select("id, class_id, member_id, booked_for, status, session_deducted")
+        .eq("org_id", roleData.org_id).in("booked_for", weekIsos).eq("status", "booked"),
+      supabase.from("class_exceptions").select("id, class_id, exception_date").eq("org_id", roleData.org_id),
+    ]);
     setClasses((c as GymClass[]) || []);
-
-    // Load bookings for each day of this week
-    const weekDates = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(weekStart);
-      d.setDate(d.getDate() + i);
-      return d.toISOString().slice(0, 10);
-    });
-
-    const { data: b } = await supabase
-      .from("class_bookings")
-      .select("id, class_id, member_id, booked_for, status, session_deducted")
-      .eq("org_id", roleData.org_id)
-      .in("booked_for", weekDates)
-      .eq("status", "booked");
-
     setBookings((b as ClassBooking[]) || []);
-
-    const { data: ex } = await supabase
-      .from("class_exceptions")
-      .select("id, class_id, exception_date")
-      .eq("org_id", roleData.org_id);
-
     setExceptions(new Set(((ex as ClassException[]) || []).map((e) => `${e.class_id}:${e.exception_date}`)));
     setLoading(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -780,244 +791,355 @@ export default function ClassesPage() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  const bookingCount = (classId: string, dayIso: string) =>
-    bookings.filter((b) => b.class_id === classId && b.booked_for === dayIso).length;
+  const bookingCount = (classId: string, iso: string) => bookings.filter((b) => b.class_id === classId && b.booked_for === iso).length;
 
-  const totalBooked = bookings.length;
-  const totalSpots = classes.reduce((s, c) => s + c.capacity, 0);
+  const trainers = useMemo(() => [...new Set(classes.map((c) => c.trainer_name).filter(Boolean) as string[])].sort(), [classes]);
+  const shown = trainer ? classes.filter((c) => c.trainer_name === trainer) : classes;
 
-  const uniqueTrainers = new Set(classes.map((c) => c.trainer_name).filter(Boolean)).size;
+  // Occurrences this week (respecting recurrence and cancellations)
+  const occ = useMemo(() => weekIsos.map((iso) => shown.filter((c) => occursOn(c, iso, exceptions))),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [shown, exceptions, weekIsos.join()]);
+  const sessions = occ.reduce((s, d) => s + d.length, 0);
+  const spots = occ.reduce((s, d) => s + d.reduce((x, c) => x + c.capacity, 0), 0);
+  const booked = occ.reduce((s, d, i) => s + d.reduce((x, c) => x + bookingCount(c.id, weekIsos[i]), 0), 0);
+  const fill = spots ? Math.round((booked / spots) * 100) : 0;
+  const fullSessions = occ.reduce((s, d, i) => s + d.filter((c) => bookingCount(c.id, weekIsos[i]) >= c.capacity).length, 0);
+
+  // Visible hours: fit around this week's classes, never less than 6am–9pm
+  const allTimes = occ.flat();
+  const startH = Math.min(6, ...allTimes.map((c) => Math.floor(parseTime(c.start_time) / 60)));
+  const endH = Math.max(21, ...allTimes.map((c) => Math.ceil((parseTime(c.start_time) + c.duration_mins) / 60)));
+  const hours = Array.from({ length: endH - startH }, (_, i) => startH + i);
+  const hourH = Math.max(26, gridH > 0 ? Math.floor(gridH / hours.length) : 44);
+
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const nowTop = ((nowMins / 60) - startH) * hourH;
+  const showNow = nowMins / 60 >= startH && nowMins / 60 <= endH;
+
+  const visibleDays = view === "day" ? [dayIdx] : [0, 1, 2, 3, 4, 5, 6];
+
+  function open(cls: GymClass, iso: string) { setSelectedClass(cls); setSelectedBookedFor(iso); }
+
+  function renderBlock(cls: GymClass, iso: string, col: number, cols: number, span: number) {
+    const top = ((parseTime(cls.start_time) / 60) - startH) * hourH;
+    const height = Math.max((cls.duration_mins / 60) * hourH - 3, 22);
+    const n = bookingCount(cls.id, iso);
+    const full = n >= cls.capacity;
+    const pct = cls.capacity > 0 ? Math.min(1, n / cls.capacity) : 0;
+    const c = BLOCK[cls.color] ?? BLOCK.blue;
+    const tight = height < 44 || cols > 2;
+    return (
+      <button key={cls.id} type="button" className="cl-block" onClick={() => open(cls, iso)}
+        title={`${cls.name} · ${fmt12(cls.start_time)} · ${cls.duration_mins} min${cls.trainer_name ? ` · ${cls.trainer_name}` : ""} · ${n}/${cls.capacity} booked`}
+        style={{
+          top: top + 1, height,
+          left: `calc(2px + ${col} * (100% - 4px) / ${cols})`,
+          width: `calc(${span} * (100% - 4px) / ${cols} - 2px)`,
+          background: c.fill, borderColor: c.soft, color: c.text, ["--acc" as string]: c.accent,
+        } as React.CSSProperties}>
+        <span className="cl-block-name">{cls.name}</span>
+        {!tight && <span className="cl-block-sub">{fmt12(cls.start_time)}{cls.trainer_name ? ` · ${cls.trainer_name}` : ""}</span>}
+        {height >= 34 && (
+          <span className="cl-block-foot">
+            {full ? <b className="cl-full">Full</b> : <span>{n}/{cls.capacity}</span>}
+            <i className="cl-block-bar"><i style={{ width: `${pct * 100}%`, background: full ? "#ff3b30" : c.accent }} /></i>
+          </span>
+        )}
+      </button>
+    );
+  }
 
   return (
-    <div className="ps-page db" style={{ paddingBottom: 40 }}>
+    <div className="ps-page db cl">
       <DesignStyles />
+      <style>{CL_CSS}</style>
 
       {/* Header */}
-      <header className="db-header">
-        <div style={{ minWidth: 0 }}>
-          <div className="db-kicker">Coaching</div>
-          <h1 className="db-title">Classes</h1>
-          <p className="db-subtitle">
-            {loading ? "\u00a0" : <><strong>{classes.length}</strong> active class{classes.length === 1 ? "" : "es"} this week</>}
-          </p>
-        </div>
-        <div className="db-header-actions">
-          {orgId && (
-            <button type="button" className="ps-btn ps-btn--primary" onClick={() => setCreateOpen(true)}>
-              <Plus size={16} strokeWidth={2.4} /> <span>New class</span>
-            </button>
-          )}
-        </div>
-      </header>
-
-      {/* Summary bar — compact, sits above the calendar which is the real content */}
-      <div className="db-card db-statbar">
-        <div className="db-stat db-tone-blue">
-          <span className="db-chip"><CalendarDays size={15} strokeWidth={2.3} /></span>
-          <div style={{ minWidth: 0 }}>
-            <div className="db-stat-label">Active classes</div>
-            <div className="db-stat-value">{loading ? <Skeleton w={30} h={20} /> : classes.length}</div>
+      <header className="cl-head">
+        <div className="cl-title">
+          <span className="cl-title-icon"><CalendarDays size={20} /></span>
+          <div>
+            <h1>Classes</h1>
+            <p>{loading ? "\u00a0" : `${classes.length} active class${classes.length === 1 ? "" : "es"} · ${rangeLabel}`}</p>
           </div>
         </div>
-        <div className="db-stat db-tone-green">
-          <span className="db-chip"><CheckCircle2 size={15} strokeWidth={2.3} /></span>
-          <div style={{ minWidth: 0 }}>
-            <div className="db-stat-label">Booked this week</div>
-            <div className="db-stat-value">{loading ? <Skeleton w={50} h={20} /> : <>{totalBooked}<span className="db-stat-note">of {totalSpots} spots</span></>}</div>
+        <div className="cl-kpis">
+          <div className="cl-kpi cl-kpi--blue"><CalendarDays size={15} /><div><small>Sessions</small><b>{loading ? "–" : sessions}</b></div></div>
+          <div className="cl-kpi cl-kpi--green"><CheckCircle2 size={15} /><div><small>Booked</small><b>{loading ? "–" : <>{booked}<em>/{spots}</em></>}</b></div></div>
+          <div className="cl-kpi cl-kpi--purple">
+            <span className="cl-mini-ring" style={{ "--p": fill } as React.CSSProperties} />
+            <div><small>Fill rate</small><b>{loading ? "–" : `${fill}%`}</b></div>
           </div>
+          <div className="cl-kpi cl-kpi--red"><Users size={15} /><div><small>Full</small><b>{loading ? "–" : fullSessions}</b></div></div>
+          <div className="cl-kpi cl-kpi--amber"><Dumbbell size={15} /><div><small>Trainers</small><b>{loading ? "–" : trainers.length}</b></div></div>
         </div>
-        <div className="db-stat db-tone-purple">
-          <span className="db-chip"><Users size={15} strokeWidth={2.3} /></span>
-          <div style={{ minWidth: 0 }}>
-            <div className="db-stat-label">Fill rate</div>
-            <div className="db-stat-value">{loading ? <Skeleton w={30} h={20} /> : totalSpots > 0 ? `${Math.round((totalBooked / totalSpots) * 100)}%` : "—"}</div>
-          </div>
-        </div>
-        <div className="db-stat db-tone-amber">
-          <span className="db-chip"><Dumbbell size={15} strokeWidth={2.3} /></span>
-          <div style={{ minWidth: 0 }}>
-            <div className="db-stat-label">Trainers</div>
-            <div className="db-stat-value">{loading ? <Skeleton w={30} h={20} /> : uniqueTrainers}</div>
-          </div>
-        </div>
-      </div>
-
-      {/* Week nav */}
-      <div className="db-week-nav">
-        <button type="button" className="db-icon-btn db-week-arrow" onClick={() => setWeekOffset((w) => w - 1)} aria-label="Previous week">
-          <ChevronLeft size={18} />
-        </button>
-        <span className="db-week-label">{weekLabel}</span>
-        <button type="button" className="db-icon-btn db-week-arrow" onClick={() => setWeekOffset((w) => w + 1)} aria-label="Next week">
-          <ChevronRight size={18} />
-        </button>
-        {weekOffset !== 0 && (
-          <button type="button" className="ps-btn ps-btn--tinted ps-btn--sm" onClick={() => setWeekOffset(0)}>
-            Today
+        {orgId && (
+          <button type="button" className="ps-btn ps-btn--primary cl-new" onClick={() => setCreateOpen(true)}>
+            <Plus size={16} strokeWidth={2.4} /> <span>New class</span>
           </button>
         )}
-      </div>
+      </header>
 
-      {/* Calendar */}
-      <div className="db-card db-calendar">
-        {/* Day header row */}
-        <div className="db-cal-head" style={{ gridTemplateColumns: "52px repeat(7, 1fr)" }}>
-          <div />
-          {DAY_SHORT.map((day, di) => {
-            const dayDate = new Date(weekStart);
-            dayDate.setDate(dayDate.getDate() + di);
-            const isToday = dayDate.toDateString() === new Date().toDateString();
-            const dayIso2 = dayDate.toISOString().slice(0, 10);
-            const dayClasses = classes.filter((c) => occursOn(c, dayIso2, exceptions));
+      {/* Calendar card */}
+      <div className="cl-card">
+        <div className="cl-toolbar">
+          <div className="cl-nav">
+            <button type="button" className="cl-arrow" onClick={() => setWeekOffset((w) => w - 1)} aria-label="Previous week"><ChevronLeft size={17} /></button>
+            <button type="button" className="cl-arrow" onClick={() => setWeekOffset((w) => w + 1)} aria-label="Next week"><ChevronRight size={17} /></button>
+            <strong className="cl-week">{weekLabel}</strong>
+            {weekOffset !== 0 && <button type="button" className="cl-today" onClick={() => { setWeekOffset(0); const d = new Date().getDay(); setDayIdx(d === 0 ? 6 : d - 1); }}>Today</button>}
+          </div>
+
+          {trainers.length > 0 && (
+            <div className="cl-trainers" role="group" aria-label="Filter by trainer">
+              <button type="button" aria-pressed={!trainer} onClick={() => setTrainer(null)}>All trainers</button>
+              {trainers.map((t) => (
+                <button key={t} type="button" aria-pressed={trainer === t} onClick={() => setTrainer(trainer === t ? null : t)}>
+                  <Avatar name={t} size={18} />{t}
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="cl-views" role="tablist" aria-label="Calendar view">
+            {(["week", "day", "agenda"] as View[]).map((v) => (
+              <button key={v} type="button" role="tab" aria-selected={view === v} data-view={v} onClick={() => setView(v)}>{v === "week" ? "Week" : v === "day" ? "Day" : "List"}</button>
+            ))}
+          </div>
+        </div>
+
+        {/* Day header / day picker */}
+        <div className="cl-days" data-view={view}>
+          <div className="cl-gutter" />
+          {weekDates.map((d, i) => {
+            const iso = weekIsos[i];
+            const isToday = iso === todayStr;
+            const list = occ[i];
+            const dayBooked = list.reduce((s, c) => s + bookingCount(c.id, iso), 0);
+            const daySpots = list.reduce((s, c) => s + c.capacity, 0);
             return (
-              <div key={day} className={`db-cal-daycol${isToday ? " db-cal-daycol--today" : ""}`}>
-                <div className="db-cal-dayname">{day}</div>
-                <div className="db-cal-daynum">{isToday ? <span className="db-cal-today-badge">{dayDate.getDate()}</span> : dayDate.getDate()}</div>
-                {dayClasses.length > 0 && (
-                  <div className="db-cal-daycount">{dayClasses.length} class{dayClasses.length > 1 ? "es" : ""}</div>
-                )}
-              </div>
+              <button key={iso} type="button" className="cl-day" data-today={isToday} data-on={view !== "week" && i === dayIdx}
+                onClick={() => { setDayIdx(i); if (view === "week") setView("day"); }}>
+                <small>{DAY_SHORT[i]}</small>
+                <b>{d.getDate()}</b>
+                <span className="cl-day-meta">
+                  {list.length ? <>{list.length} class{list.length > 1 ? "es" : ""}{daySpots ? ` · ${Math.round((dayBooked / daySpots) * 100)}%` : ""}</> : "—"}
+                </span>
+                <span className="cl-day-dots" aria-hidden>{list.slice(0, 5).map((c) => <i key={c.id} style={{ background: (BLOCK[c.color] ?? BLOCK.blue).accent }} />)}</span>
+              </button>
             );
           })}
         </div>
 
-        {/* Time grid */}
         {loading ? (
-          <div style={{ padding: "40px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
-            {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} w="100%" h={60} r={12} />)}
-          </div>
-        ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "52px repeat(7, 1fr)", overflowY: "auto", maxHeight: "70vh" }}>
-            {/* Time labels */}
-            <div>
-              {HOURS.map((h) => (
-                <div key={h} className="db-cal-timelabel" style={{ height: HOUR_HEIGHT }}>
-                  {h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`}
-                </div>
-              ))}
-            </div>
-
-            {/* Day columns */}
-            {DAY_SHORT.map((_, di) => {
-              const dayDate = new Date(weekStart);
-              dayDate.setDate(dayDate.getDate() + di);
-              const dayIso = dayDate.toISOString().slice(0, 10);
-              const isToday = dayDate.toDateString() === new Date().toDateString();
-              const dayClasses = classes.filter((c) => occursOn(c, dayIso, exceptions));
-
+          <div className="cl-loading">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} w="100%" h={56} r={12} />)}</div>
+        ) : view === "agenda" ? (
+          <div className="cl-agenda">
+            {weekDates.map((d, i) => {
+              const iso = weekIsos[i];
+              const list = [...occ[i]].sort((a, b) => parseTime(a.start_time) - parseTime(b.start_time));
+              if (!list.length) return null;
               return (
-                <div key={di} className={`db-cal-col${isToday ? " db-cal-col--today" : ""}`} style={{ height: HOURS.length * HOUR_HEIGHT }}>
-                  {/* Hour lines */}
-                  {HOURS.map((h) => (
-                    <div key={h} className="db-cal-hourline" style={{ top: (h - GRID_START) * HOUR_HEIGHT }} />
-                  ))}
-
-                  {/* Class blocks — Google Calendar style side-by-side layout */}
-                  {layoutDayClasses(dayClasses).map(({ cls, col, cols, span }) => {
-                    const timeMins = parseTime(cls.start_time);
-                    const top = ((timeMins / 60) - GRID_START) * HOUR_HEIGHT;
-                    const height = Math.max((cls.duration_mins / 60) * HOUR_HEIGHT - 4, 28);
-                    const booked = bookingCount(cls.id, dayIso);
-                    const full = booked >= cls.capacity;
-                    const pct = cls.capacity > 0 ? booked / cls.capacity : 0;
-                    const colorStyle = COLOR_STYLES[cls.color] ?? COLOR_STYLES.blue;
-
-                    // Each column gets an equal slice of the day column width.
-                    // GAP = 2px between adjacent cards; 3px outer margin on each side.
-                    const colW = `calc((100% - 6px) / ${cols})`;
-                    const leftPx = `calc(3px + ${col} * (100% - 6px) / ${cols})`;
-                    const widthPx = `calc(${span} * (100% - 6px) / ${cols} - 2px)`;
-
-                    // For compact cards (< 40px), collapse subtitle into one line
-                    const compact = height < 42;
-
+                <section key={iso} className="cl-ag-day" data-today={iso === todayStr}>
+                  <h3><span>{d.toLocaleDateString("en-IN", { weekday: "long" })}</span><small>{d.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}</small>{iso === todayStr && <em>Today</em>}</h3>
+                  {list.map((c) => {
+                    const n = bookingCount(c.id, iso), full = n >= c.capacity, col = BLOCK[c.color] ?? BLOCK.blue;
                     return (
-                      <button key={cls.id} type="button"
-                        onClick={() => { setSelectedClass(cls); setSelectedBookedFor(dayIso); }}
-                        style={{
-                          position: "absolute",
-                          top: top + 2,
-                          left: leftPx,
-                          width: widthPx,
-                          height,
-                          background: colorStyle.bg,
-                          border: `1px solid ${colorStyle.border}`,
-                          borderLeft: `3px solid ${colorStyle.text}`,
-                          padding: compact ? "3px 5px" : "4px 7px",
-                          minWidth: 0,
-                        }}
-                        className="db-class-block"
-                      >
-                        {compact ? (
-                          // Single-line compact layout: name · time · count
-                          <div style={{ fontSize: 11, fontWeight: 600, color: colorStyle.text, lineHeight: 1.3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                            {cls.name}
-                            <span style={{ fontWeight: 400, opacity: 0.75 }}>
-                              {" · "}{fmt12(cls.start_time)}{" · "}{full ? "Full" : `${booked}/${cls.capacity}`}
-                            </span>
-                          </div>
-                        ) : (
-                          <>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: colorStyle.text, lineHeight: 1.2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {cls.name}
-                            </div>
-                            <div style={{ fontSize: 11, color: colorStyle.text, opacity: 0.8, marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {fmt12(cls.start_time)}{cls.trainer_name ? ` · ${cls.trainer_name}` : ""}
-                            </div>
-                            {height > 56 && (
-                              <div style={{ fontSize: 11, color: full ? "var(--red)" : colorStyle.text, opacity: 0.9, marginTop: 2, fontWeight: full ? 600 : 400 }}>
-                                {full ? "Full" : `${booked}/${cls.capacity}`}
-                              </div>
-                            )}
-                          </>
-                        )}
-                        {/* Capacity bar — only when tall enough */}
-                        {height > 36 && (
-                          <div style={{ position: "absolute", bottom: 3, left: 7, right: 7, height: 2, background: "rgba(0,0,0,0.08)", borderRadius: 1, overflow: "hidden" }}>
-                            <div style={{ width: `${pct * 100}%`, height: "100%", background: full ? "var(--red-fill)" : colorStyle.text, borderRadius: 1 }} />
-                          </div>
-                        )}
+                      <button key={c.id} type="button" className="cl-ag-row" onClick={() => open(c, iso)} style={{ ["--acc" as string]: col.accent } as React.CSSProperties}>
+                        <span className="cl-ag-time"><b>{fmt12(c.start_time)}</b><small>{c.duration_mins} min</small></span>
+                        <span className="cl-ag-main"><strong>{c.name}</strong><small>{c.trainer_name ? `with ${c.trainer_name}` : "No trainer set"}</small></span>
+                        <span className="cl-ag-cap">
+                          <span>{full ? <b className="cl-full">Full</b> : `${n}/${c.capacity}`}</span>
+                          <i className="cl-block-bar"><i style={{ width: `${Math.min(100, (n / Math.max(1, c.capacity)) * 100)}%`, background: full ? "#ff3b30" : col.accent }} /></i>
+                        </span>
+                        <ChevronRight size={16} className="cl-ag-chev" />
                       </button>
                     );
                   })}
-                </div>
+                </section>
               );
             })}
+            {sessions === 0 && <div className="cl-empty"><CalendarDays size={20} /><strong>No classes this week</strong><span>{trainer ? "Try another trainer." : "Create a class to get started."}</span></div>}
+          </div>
+        ) : (
+          <div className="cl-grid-wrap" ref={gridRef}>
+            <div className="cl-grid" data-view={view} style={{ height: hours.length * hourH }}>
+              <div className="cl-times">
+                {hours.map((h) => <span key={h} style={{ height: hourH }}>{hourLabel(h)}</span>)}
+              </div>
+              {visibleDays.map((di) => {
+                const iso = weekIsos[di];
+                const isToday = iso === todayStr;
+                return (
+                  <div key={iso} className="cl-col" data-today={isToday}>
+                    {hours.map((h, i) => <i key={h} className="cl-line" style={{ top: i * hourH }} />)}
+                    {isToday && showNow && <span className="cl-now" style={{ top: nowTop }}><i /></span>}
+                    {layoutDayClasses(occ[di]).map(({ cls, col, cols, span }) => renderBlock(cls, iso, col, cols, span))}
+                    {view === "day" && occ[di].length === 0 && (
+                      <div className="cl-col-empty"><CalendarDays size={18} /><span>No classes on {DAY_NAMES[di]}</span></div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Empty state */}
       {!loading && classes.length === 0 && (
-        <div className="db-card db-pad" style={{ marginTop: 16 }}>
-          <div className="db-empty" style={{ padding: "32px 16px" }}>
-            <span className="db-empty-icon"><CalendarDays size={18} /></span>
-            <div className="db-empty-title">No classes yet</div>
-            <div className="db-empty-text">Create your first class and start booking members.</div>
-            {orgId && (
-              <button type="button" className="ps-btn ps-btn--primary" style={{ marginTop: 14 }} onClick={() => setCreateOpen(true)}>
-                <Plus size={16} /> New class
-              </button>
-            )}
-          </div>
+        <div className="cl-first">
+          <span>No classes yet. Create your first class and start booking members.</span>
+          {orgId && <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" onClick={() => setCreateOpen(true)}><Plus size={14} /> New class</button>}
         </div>
       )}
+
+      {/* Phone: floating add */}
+      {orgId && <button type="button" className="cl-fab" onClick={() => setCreateOpen(true)} aria-label="New class"><Plus size={22} strokeWidth={2.4} /></button>}
 
       {createOpen && orgId && (
         <CreateClassSheet orgId={orgId} branchId={branchId} onClose={() => setCreateOpen(false)}
           onCreated={() => { setCreateOpen(false); loadData(); }} />
       )}
-
       {selectedClass && orgId && (
-        <ClassDetailSheet
-          cls={selectedClass}
-          bookedFor={selectedBookedFor}
-          orgId={orgId}
-          onClose={() => setSelectedClass(null)}
-          onUpdated={loadData}
-        />
+        <ClassDetailSheet cls={selectedClass} bookedFor={selectedBookedFor} orgId={orgId}
+          onClose={() => setSelectedClass(null)} onUpdated={loadData} />
       )}
-
     </div>
   );
 }
+
+// NOTE: no backticks inside this CSS.
+const CL_CSS = `
+.ps-page.cl { max-width: none !important; margin: 0 !important; padding: 18px !important; }
+.db.cl { max-width: none; }
+@media (min-width: 761px) {
+  .ps-page.cl { height: 100dvh; display: flex; flex-direction: column; overflow: hidden; }
+}
+
+/* Header */
+.cl-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.cl-title { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.cl-title-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #ff9f0a, #ff375f 55%, #af52de); box-shadow: 0 8px 18px -8px rgba(255,55,95,0.6); flex-shrink: 0; }
+.cl-title h1 { margin: 0; font-size: 24px; font-weight: 750; letter-spacing: -0.025em; }
+.cl-title p { margin: 1px 0 0; font-size: 13px; color: var(--text-tertiary); }
+.cl-kpis { display: flex; gap: 8px; flex: 1; justify-content: flex-end; flex-wrap: wrap; }
+.cl-kpi { display: flex; align-items: center; gap: 9px; height: 46px; padding: 0 12px; border-radius: 12px; background: #fff; border: 1px solid var(--separator); }
+.cl-kpi > svg { flex-shrink: 0; }
+.cl-kpi div { display: flex; flex-direction: column; line-height: 1.15; }
+.cl-kpi small { font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-tertiary); }
+.cl-kpi b { font-size: 16px; font-weight: 740; font-variant-numeric: tabular-nums; }
+.cl-kpi em { font-style: normal; font-size: 12px; font-weight: 600; color: var(--text-tertiary); }
+.cl-kpi--blue > svg { color: #0a84ff; } .cl-kpi--green > svg { color: #28b04f; } .cl-kpi--red > svg { color: #ff375f; } .cl-kpi--amber > svg { color: #ff9f0a; }
+.cl-mini-ring { --p: 0; width: 18px; height: 18px; border-radius: 50%; background: radial-gradient(circle, #fff 52%, transparent 54%), conic-gradient(#af52de calc(var(--p) * 1%), #ece3f7 0); flex-shrink: 0; }
+.cl-new { height: 42px; border-radius: 12px; }
+
+/* Card */
+.cl-card { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #fff; border: 1px solid var(--separator); border-radius: 18px; overflow: hidden; box-shadow: 0 1px 2px rgba(15,23,42,0.04); position: relative; }
+.cl-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, #0a84ff, #5e5ce6 30%, #af52de 55%, #ff375f 78%, #ff9f0a); z-index: 3; }
+.cl-toolbar { display: flex; align-items: center; gap: 10px; padding: 12px 12px 10px; border-bottom: 1px solid var(--separator); flex-wrap: wrap; }
+.cl-nav { display: flex; align-items: center; gap: 6px; }
+.cl-arrow { width: 32px; height: 32px; border-radius: 9px; border: 1px solid var(--separator); background: #fff; display: grid; place-items: center; cursor: pointer; color: var(--text-secondary); }
+.cl-arrow:hover { background: #f5f6f9; color: var(--text-primary); }
+.cl-week { font-size: 15px; font-weight: 700; margin: 0 4px; white-space: nowrap; }
+.cl-today { height: 28px; padding: 0 10px; border-radius: 8px; border: none; background: #e8f1ff; color: #0a66d6; font: inherit; font-size: 12.5px; font-weight: 650; cursor: pointer; }
+.cl-trainers { display: flex; gap: 6px; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: none; }
+.cl-trainers::-webkit-scrollbar { display: none; }
+.cl-trainers button { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; height: 30px; padding: 0 11px 0 6px; border-radius: 15px; border: 1px solid var(--separator); background: #fff; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
+.cl-trainers button:first-child { padding-left: 11px; }
+.cl-trainers button[aria-pressed="true"] { background: #1c1c1e; color: #fff; border-color: #1c1c1e; }
+.cl-views { display: flex; padding: 3px; border-radius: 10px; background: #f2f3f6; margin-left: auto; }
+.cl-views button { height: 28px; padding: 0 12px; border: none; border-radius: 7px; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-secondary); cursor: pointer; }
+.cl-views button[aria-selected="true"] { background: #fff; color: var(--text-primary); box-shadow: 0 1px 3px rgba(0,0,0,0.12); }
+
+/* Day header */
+.cl-days { display: grid; grid-template-columns: 52px repeat(7, minmax(0, 1fr)); border-bottom: 1px solid var(--separator); background: #fbfbfd; }
+.cl-days[data-view="day"], .cl-days[data-view="agenda"] { padding: 8px 8px 8px 0; gap: 6px; }
+.cl-days[data-view="agenda"] .cl-gutter { width: 8px; }
+.cl-days[data-view="agenda"] { grid-template-columns: 0 repeat(7, minmax(0, 1fr)); }
+.cl-day { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 4px 7px; border: none; border-left: 1px solid #eef0f3; background: none; font: inherit; cursor: pointer; color: var(--text-secondary); min-width: 0; }
+.cl-days[data-view="day"] .cl-day, .cl-days[data-view="agenda"] .cl-day { border: 1px solid transparent; border-radius: 12px; }
+.cl-day:hover { background: #f2f4f8; }
+.cl-day small { font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.cl-day b { font-size: 19px; font-weight: 720; color: var(--text-primary); width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; }
+.cl-day[data-today="true"] small { color: #0a66d6; }
+.cl-day[data-today="true"] b { background: linear-gradient(135deg, #0a84ff, #5e5ce6); color: #fff; box-shadow: 0 4px 10px -4px rgba(10,132,255,0.7); }
+.cl-day-meta { font-size: 11px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.cl-day-dots { display: flex; gap: 3px; height: 6px; margin-top: 2px; }
+.cl-day-dots i { width: 6px; height: 6px; border-radius: 50%; }
+.cl-day[data-on="true"] { background: #fff; border-color: #0a84ff !important; box-shadow: 0 0 0 3px rgba(10,132,255,0.12); }
+
+/* Grid */
+.cl-grid-wrap { flex: 1; min-height: 0; overflow-y: auto; position: relative; }
+.cl-grid { display: grid; grid-template-columns: 52px repeat(7, minmax(0, 1fr)); position: relative; }
+.cl-grid[data-view="day"] { grid-template-columns: 52px minmax(0, 1fr); }
+.cl-times span { display: block; position: relative; font-size: 11px; font-weight: 600; color: var(--text-tertiary); text-align: right; padding-right: 8px; transform: translateY(-7px); }
+.cl-times span:first-child { transform: none; padding-top: 2px; }
+.cl-col { position: relative; border-left: 1px solid #eef0f3; min-width: 0; }
+.cl-col[data-today="true"] { background: linear-gradient(180deg, rgba(10,132,255,0.05), rgba(10,132,255,0.025)); }
+.cl-line { position: absolute; left: 0; right: 0; height: 1px; background: #f0f1f4; }
+.cl-now { position: absolute; left: -1px; right: 0; height: 2px; background: #ff3b30; z-index: 4; pointer-events: none; }
+.cl-now i { position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: #ff3b30; box-shadow: 0 0 0 3px rgba(255,59,48,0.2); }
+.cl-col-empty { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--text-tertiary); font-size: 13.5px; }
+
+.cl-block { position: absolute; z-index: 2; display: flex; flex-direction: column; align-items: stretch; gap: 1px; padding: 4px 7px 4px 9px; border: 1px solid; border-radius: 9px; font: inherit; text-align: left; cursor: pointer; overflow: hidden; min-width: 0; transition: transform 120ms ease, box-shadow 120ms ease; }
+.cl-block::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--acc); }
+.cl-block:hover { transform: translateY(-1px); box-shadow: 0 8px 18px -10px rgba(15,23,42,0.45); z-index: 5; }
+.cl-block-name { font-size: 12.5px; font-weight: 700; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cl-block-sub { font-size: 11px; opacity: 0.8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cl-block-foot { display: flex; align-items: center; gap: 6px; margin-top: auto; font-size: 11px; font-weight: 650; }
+.cl-block-bar { flex: 1; height: 4px; border-radius: 3px; background: rgba(0,0,0,0.08); overflow: hidden; display: block; min-width: 16px; }
+.cl-block-bar i { display: block; height: 100%; border-radius: 3px; }
+.cl-full { color: #d70015; font-weight: 750; }
+
+/* Agenda */
+.cl-agenda { flex: 1; min-height: 0; overflow-y: auto; padding: 8px 12px 16px; }
+.cl-ag-day h3 { position: sticky; top: 0; z-index: 2; display: flex; align-items: baseline; gap: 8px; margin: 0; padding: 12px 4px 8px; background: #fff; font-size: 14px; font-weight: 700; }
+.cl-ag-day h3 small { font-size: 12.5px; color: var(--text-tertiary); font-weight: 550; }
+.cl-ag-day h3 em { font-style: normal; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 9px; background: #e8f1ff; color: #0a66d6; }
+.cl-ag-row { position: relative; display: grid; grid-template-columns: 76px minmax(0, 1fr) 140px 18px; align-items: center; gap: 12px; width: 100%; padding: 10px 12px 10px 16px; margin-bottom: 6px; border: 1px solid var(--separator); border-radius: 12px; background: #fff; font: inherit; text-align: left; cursor: pointer; overflow: hidden; }
+.cl-ag-row::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--acc); }
+.cl-ag-row:hover { background: #fafbfd; border-color: #d5d9e0; }
+.cl-ag-time { display: flex; flex-direction: column; } .cl-ag-time b { font-size: 14px; } .cl-ag-time small { font-size: 12px; color: var(--text-tertiary); }
+.cl-ag-main { display: flex; flex-direction: column; min-width: 0; }
+.cl-ag-main strong { font-size: 14.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cl-ag-main small { font-size: 12.5px; color: var(--text-tertiary); }
+.cl-ag-cap { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 650; }
+.cl-ag-cap > span { min-width: 34px; }
+.cl-ag-chev { color: var(--text-tertiary); }
+.cl-empty { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 48px 16px; color: var(--text-tertiary); font-size: 13.5px; }
+.cl-empty strong { color: var(--text-primary); font-size: 15px; }
+.cl-loading { padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+.cl-first { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 10px; padding: 10px 14px; border-radius: 12px; background: #fff6e8; color: #8a4500; font-size: 13.5px; }
+.cl-fab { display: none; }
+
+@media (max-width: 1200px) { .cl-kpi:nth-child(4) { display: none; } }
+@media (max-width: 1000px) {
+  .cl-kpis { order: 3; flex-basis: 100%; justify-content: flex-start; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .cl-kpi:nth-child(4) { display: flex; }
+  .cl-kpi { flex: 0 0 auto; }
+  .cl-new { margin-left: auto; }
+}
+@media (max-width: 760px) {
+  .ps-page.cl { padding: 10px 10px calc(84px + env(safe-area-inset-bottom, 0px)) !important; }
+  .cl-head { gap: 10px; }
+  .cl-title h1 { font-size: 22px; }
+  .cl-new { display: none; }
+  .cl-kpi { height: 42px; padding: 0 10px; }
+  .cl-card { border-radius: 16px; }
+  .cl-toolbar { padding: 10px; gap: 8px; }
+  .cl-views { margin-left: auto; }
+  .cl-views button[data-view="week"] { display: none; }
+  .cl-trainers { order: 3; flex-basis: 100%; }
+  .cl-days { grid-template-columns: 0 repeat(7, minmax(0, 1fr)) !important; padding: 6px 6px 6px 0; gap: 2px; }
+  .cl-days .cl-day { border: 1px solid transparent; border-radius: 12px; padding: 6px 0; }
+  .cl-day b { width: 30px; height: 30px; font-size: 16px; }
+  .cl-day-meta { display: none; }
+  .cl-grid-wrap { height: calc(100dvh - 330px); min-height: 380px; flex: none; }
+  .cl-agenda { max-height: none; overflow: visible; padding: 4px 8px 12px; }
+  .cl-ag-row { grid-template-columns: 62px minmax(0, 1fr) 18px; gap: 10px; }
+  .cl-ag-cap { grid-column: 2; grid-row: 2; }
+  .cl-ag-chev { grid-column: 3; grid-row: 1 / span 2; }
+  .cl-fab { position: fixed; right: 16px; bottom: calc(var(--tabbar-h, 0px) + env(safe-area-inset-bottom, 0px) + 16px); z-index: 40; width: 54px; height: 54px; border-radius: 50%; border: none; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #0a84ff, #5e5ce6); box-shadow: 0 12px 24px -8px rgba(10,132,255,0.7); cursor: pointer; }
+}
+`;

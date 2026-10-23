@@ -8,11 +8,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import {
-  ChevronDown, ChevronUp, Loader2, Pencil, Plus, Search, Trash2, UtensilsCrossed, X, Sparkles, Carrot, Calculator,
+  ChevronDown, ChevronUp, Loader2, Pencil, Plus, Search, Trash2, UtensilsCrossed, X, Sparkles, Carrot, Calculator, Flame, Beef, Clock, ChevronLeft, Copy,
 } from "lucide-react";
 import { formatDate, Skeleton, useToast } from "../../components/ui";
 import { Sheet } from "../../components/Sheet";
 import { DesignStyles } from "../../components/DesignSystem";
+import { DietStyles, MacroSplit, MACRO_COLOR } from "../components/DietTheme"
 import { useRole } from "../../components/useRole";
 import { IngredientSheet } from "../components/IngredientSheet";
 import { matchIngredient, perServing, type IngredientRow, type RecipeLine } from "@/lib/nutrition/recipeMath";
@@ -155,9 +156,36 @@ function AIHelper({ onApply }: { onApply: (s: AISuggestion) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [remaining, setRemaining] = useState<number | null>(null);
+  // Today's allowance comes from the server (GET /api/ai/recipe-suggest), and is refreshed
+  // from remaining_today after every suggestion. The last value is cached for an instant first paint.
+  const [daily, setDaily] = useState(20);
+  const DAILY = daily;
+  const today = new Date().toISOString().slice(0, 10);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("psync.ai.recipes") ?? "null") as { day: string; left: number } | null;
+      if (saved && saved.day === today) setRemaining(saved.left);
+    } catch { /* ignore */ }
+    (async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const res = await fetch("/api/ai/recipe-suggest", { headers: { Authorization: `Bearer ${session.access_token}` } }).catch(() => null);
+      if (!res?.ok) return;
+      const j = await res.json().catch(() => null) as { limit?: number; remaining_today?: number } | null;
+      if (typeof j?.limit === "number") setDaily(j.limit);
+      if (typeof j?.remaining_today === "number") rememberLeft(j.remaining_today);
+    })();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  function rememberLeft(left: number) {
+    setRemaining(left);
+    try { localStorage.setItem("psync.ai.recipes", JSON.stringify({ day: today, left })); } catch { /* ignore */ }
+  }
+  const used = remaining == null ? 0 : Math.max(0, DAILY - remaining);
+  const outOfCredits = remaining === 0;
 
   async function suggest() {
-    if (dish.trim().length < 2 || busy) return;
+    if (dish.trim().length < 2 || busy || outOfCredits) return;
     setBusy(true); setError("");
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -168,7 +196,7 @@ function AIHelper({ onApply }: { onApply: (s: AISuggestion) => void }) {
         body: JSON.stringify({ dish: dish.trim(), servings, goal, diet }),
       });
       const json = await res.json().catch(() => ({}));
-      if (typeof json.remaining_today === "number") setRemaining(json.remaining_today);
+      if (typeof json.remaining_today === "number") rememberLeft(json.remaining_today);
       if (!res.ok) { setError(json.error ?? "The AI helper couldn't respond. Try again."); return; }
       onApply(json as AISuggestion);
     } catch {
@@ -192,22 +220,30 @@ function AIHelper({ onApply }: { onApply: (s: AISuggestion) => void }) {
         <input className="ps-input" value={dish} maxLength={60} placeholder="e.g. Dal Makhani, Paneer Bhurji"
           onChange={(e) => setDish(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); suggest(); } }}
           aria-label="Dish name" />
-        <button type="button" className="ps-btn ps-btn--primary" onClick={suggest} disabled={busy || dish.trim().length < 2}>
+        <button type="button" className="ps-btn ps-btn--primary" onClick={suggest} disabled={busy || dish.trim().length < 2 || outOfCredits}>
           {busy ? <Loader2 size={15} className="ps-spin" /> : <Sparkles size={15} />}
           <span>{busy ? "Thinking…" : "Suggest recipe"}</span>
         </button>
       </div>
 
+      <div className="ai-opts">
+      <div className="ai-opt-row">
+      <span className="ai-opt-label">Goal</span>
       <div className="db-presets" role="radiogroup" aria-label="Goal">
         {GOALS.map((g) => (
           <button key={g.key} type="button" className="db-preset" role="radio" aria-checked={goal === g.key} aria-pressed={goal === g.key} onClick={() => setGoal(g.key)}>{g.label}</button>
         ))}
       </div>
+      </div>
+      <div className="ai-opt-row">
+      <span className="ai-opt-label">Diet</span>
       <div className="db-presets" role="radiogroup" aria-label="Diet">
         <button type="button" className="db-preset" role="radio" aria-checked={diet === "any"} aria-pressed={diet === "any"} onClick={() => setDiet("any")}>Any diet</button>
         {DIET_TYPES.map((d) => (
           <button key={d} type="button" className="db-preset" role="radio" aria-checked={diet === d} aria-pressed={diet === d} onClick={() => setDiet(d)}>{DIET_LABELS[d]}</button>
         ))}
+      </div>
+      </div>
       </div>
 
       <div className="db-ai-foot">
@@ -219,8 +255,16 @@ function AIHelper({ onApply }: { onApply: (s: AISuggestion) => void }) {
             <button type="button" aria-label="More servings" disabled={servings >= 12} onClick={() => setServings((s) => s + 1)}>+</button>
           </span>
         </span>
-        {remaining != null && <span>{remaining} AI recipe{remaining === 1 ? "" : "s"} left today</span>}
+        {remaining != null && (
+          <span className="ai-credits" data-low={remaining <= 3} title={`${used} of ${DAILY} AI suggestions used today`}>
+            <Sparkles size={13} />
+            <span className="ai-credits-text"><b>{remaining}</b> of {DAILY} left today · {used} used</span>
+            <span className="ai-credits-bar"><i style={{ width: `${(remaining / DAILY) * 100}%` }} /></span>
+          </span>
+        )}
       </div>
+      {outOfCredits && <div className="ai-out">You&apos;ve used all {DAILY} AI suggestions for today. They reset at midnight. You can still build the recipe by hand below.</div>}
+      <style>{AI_CSS}</style>
 
       {error && <div className="ps-error" role="alert" style={{ marginTop: 12 }}>{error}</div>}
     </section>
@@ -580,6 +624,9 @@ export default function GymRecipesPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [mealFilter, setMealFilter] = useState<string>("all");
+  const [dietFilter, setDietFilter] = useState<string>("");
+  const [flagFilter, setFlagFilter] = useState<string[]>([]);
+  const [sort, setSort] = useState<"new" | "name" | "kcal_lo" | "kcal_hi" | "protein">("new");
   const [sheetOpen, setSheetOpen] = useState(false);
   const [editRecipe, setEditRecipe] = useState<Recipe | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -630,244 +677,147 @@ export default function GymRecipesPage() {
   const q = search.trim().toLowerCase();
   const filtered = recipes.filter((r) => {
     if (mealFilter !== "all" && !r.meal_type?.includes(mealFilter)) return false;
-    if (q) return r.recipe_name.toLowerCase().includes(q) || (r.cuisine || "").toLowerCase().includes(q);
+    if (dietFilter && !r.diet_type?.includes(dietFilter)) return false;
+    if (flagFilter.some((f) => !r[f as keyof Recipe])) return false;
+    if (q) return r.recipe_name.toLowerCase().includes(q) || (r.cuisine || "").toLowerCase().includes(q)
+      || (r.ingredients ?? []).some((i) => storedName(i).toLowerCase().includes(q));
     return true;
-  });
+  }).sort((a, b) => sort === "name" ? a.recipe_name.localeCompare(b.recipe_name)
+    : sort === "kcal_lo" ? (a.calories_kcal ?? 0) - (b.calories_kcal ?? 0)
+    : sort === "kcal_hi" ? (b.calories_kcal ?? 0) - (a.calories_kcal ?? 0)
+    : sort === "protein" ? (b.protein_g ?? 0) - (a.protein_g ?? 0)
+    : (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+  const avg = (k: "calories_kcal" | "protein_g") => recipes.length ? Math.round(recipes.reduce((s0, r) => s0 + (r[k] ?? 0), 0) / recipes.length) : 0;
+  const mealCount = (mt: string) => recipes.filter((r) => r.meal_type?.includes(mt)).length;
 
   const openNew = () => { setEditRecipe(null); setSheetOpen(true); };
-  const hasFilters = mealFilter !== "all" || q !== "";
+  const hasFilters = mealFilter !== "all" || q !== "" || !!dietFilter || flagFilter.length > 0;
+  const clearAll = () => { setSearch(""); setMealFilter("all"); setDietFilter(""); setFlagFilter([]); };
 
   return (
-    <div className="ps-page db">
-      <DesignStyles />
+    <div className="ps-page db dt rl">
+      <DesignStyles /><DietStyles />
+      <style>{RL_CSS}</style>
 
-      <header className="db-header">
-        <div style={{ minWidth: 0 }}>
-          <div className="db-kicker">Coaching</div>
-          <h1 className="db-title">Recipe library</h1>
-          <p className="db-subtitle">
-            {loading
-              ? "\u00a0"
-              : <><strong>{recipes.length}</strong> custom recipe{recipes.length === 1 ? "" : "s"} in your gym&apos;s library</>}
-          </p>
+      <div className="dt-crumbs"><Link href="/dashboard/diet"><ChevronLeft size={16} /> Diet plans</Link><span>/</span><b>Recipes</b></div>
+
+      <header className="dt-head">
+        <div className="dt-title">
+          <span className="dt-title-icon"><UtensilsCrossed size={21} /></span>
+          <div>
+            <h1>Recipe library</h1>
+            <p>{loading ? "\u00a0" : `${recipes.length} custom recipe${recipes.length === 1 ? "" : "s"} · used as swap options in diet plans`}</p>
+          </div>
         </div>
-        <div className="db-header-actions">
-          <Link href="/dashboard/diet/ingredients" className="ps-btn ps-btn--secondary"><Carrot size={16} /> <span>Ingredients</span></Link>
-          {orgId && (
-            <button type="button" className="ps-btn ps-btn--primary" onClick={openNew}>
-              <Plus size={16} strokeWidth={2.4} /> <span>New recipe</span>
-            </button>
-          )}
+        <div className="dt-actions">
+          <Link href="/dashboard/diet/ingredients" className="ps-btn ps-btn--secondary"><Carrot size={16} /><span>Ingredients</span></Link>
+          {orgId && <button type="button" className="ps-btn ps-btn--primary" onClick={openNew}><Plus size={16} strokeWidth={2.4} /><span>New recipe</span></button>}
+        </div>
+        <div className="dt-kpis">
+          <div className="dt-kpi"><span className="dt-kpi-icon"><UtensilsCrossed size={15} /></span><div><small>Recipes</small><b>{loading ? "–" : recipes.length}</b></div></div>
+          <div className="dt-kpi"><span className="dt-kpi-icon"><Beef size={15} /></span><div><small>High protein</small><b>{loading ? "–" : recipes.filter((r) => r.is_high_protein).length}</b></div></div>
+          <div className="dt-kpi"><span className="dt-kpi-icon"><Flame size={15} /></span><div><small>Avg. calories</small><b>{loading ? "–" : `${avg("calories_kcal")} kcal`}</b></div></div>
+          <div className="dt-kpi"><span className="dt-kpi-icon"><Beef size={15} /></span><div><small>Avg. protein</small><b>{loading ? "–" : `${avg("protein_g")} g`}</b></div></div>
         </div>
       </header>
 
-      <div className="db-card db-toolbar">
-        <label className="db-search">
-          <Search size={16} />
-          <input
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or cuisine"
-            aria-label="Search recipes"
-          />
-        </label>
-        <div className="db-presets" role="group" aria-label="Filter by meal type" style={{ flexBasis: "100%" }}>
-          <button type="button" className="db-preset" aria-pressed={mealFilter === "all"} onClick={() => setMealFilter("all")}>All meals</button>
+      <div className="dt-toolbar">
+        <div className="dt-row">
+          <label className="dt-search"><Search size={16} />
+            <input type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, cuisine or ingredient" aria-label="Search recipes" />
+          </label>
+          <select className="dt-select" value={dietFilter} onChange={(e) => setDietFilter(e.target.value)} aria-label="Diet">
+            <option value="">All diets</option>
+            {DIET_TYPES.map((d) => <option key={d} value={d}>{DIET_LABELS[d]}</option>)}
+          </select>
+          <select className="dt-select" value={sort} onChange={(e) => setSort(e.target.value as typeof sort)} aria-label="Sort">
+            <option value="new">Newest</option><option value="name">Name A–Z</option>
+            <option value="kcal_lo">Fewest calories</option><option value="kcal_hi">Most calories</option><option value="protein">Most protein</option>
+          </select>
+        </div>
+        <div className="dt-chips" role="group" aria-label="Meal">
+          <button type="button" className="dt-chip" aria-pressed={mealFilter === "all"} onClick={() => setMealFilter("all")}>All meals <em>{recipes.length}</em></button>
           {MEAL_TYPES.map((mt) => (
-            <button key={mt} type="button" className="db-preset" aria-pressed={mealFilter === mt} onClick={() => setMealFilter(mealFilter === mt ? "all" : mt)}>
-              {MEAL_LABELS[mt]}
-            </button>
+            <button key={mt} type="button" className="dt-chip" aria-pressed={mealFilter === mt} onClick={() => setMealFilter(mealFilter === mt ? "all" : mt)}>{MEAL_LABELS[mt]} <em>{mealCount(mt)}</em></button>
           ))}
+        </div>
+        <div className="dt-chips" role="group" aria-label="Suitable for">
+          {FLAGS.map((f) => (
+            <button key={f.key} type="button" className="dt-chip" aria-pressed={flagFilter.includes(f.key)}
+              onClick={() => setFlagFilter((p) => p.includes(f.key) ? p.filter((x) => x !== f.key) : [...p, f.key])}>{f.label}</button>
+          ))}
+          {hasFilters && <button type="button" className="dt-link" onClick={clearAll}>Clear filters</button>}
+          <span className="dt-count" style={{ marginLeft: "auto" }}>{filtered.length} of {recipes.length}</span>
         </div>
       </div>
 
       {loading ? (
-        <div className="db-card db-meallist">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="db-mealrow-wrap">
-              <div className="db-mealrow-head" style={{ cursor: "default" }}>
-                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                  <Skeleton w={90} h={10} />
-                  <Skeleton w={200} h={14} />
-                  <Skeleton w={140} h={11} />
-                </div>
-                <Skeleton w={56} h={16} />
-                <span />
-              </div>
-            </div>
-          ))}
-        </div>
+        <div className="rl-grid">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} w="100%" h={190} r={16} />)}</div>
       ) : filtered.length === 0 ? (
-        <div className="db-card db-pad">
-          <div className="db-empty">
-            <span className="db-empty-icon"><UtensilsCrossed size={18} /></span>
-            <div className="db-empty-title">{recipes.length === 0 ? "No custom recipes yet" : "No recipes match"}</div>
-            <div className="db-empty-text">
-              {recipes.length === 0
-                ? "Add your gym's own recipes and they'll appear as swap options in diet plans."
-                : "Try a different name or meal type."}
-            </div>
-            {recipes.length === 0 && orgId && (
-              <button type="button" className="ps-btn ps-btn--primary" style={{ marginTop: 14 }} onClick={openNew}>
-                <Plus size={16} strokeWidth={2.4} /> <span>New recipe</span>
-              </button>
-            )}
-            {recipes.length > 0 && hasFilters && (
-              <button type="button" className="ps-btn ps-btn--secondary ps-btn--sm" style={{ marginTop: 14 }} onClick={() => { setSearch(""); setMealFilter("all"); }}>
-                <span>Clear filters</span>
-              </button>
-            )}
-          </div>
+        <div className="dt-empty">
+          <span className="dt-empty-icon"><UtensilsCrossed size={20} /></span>
+          <strong>{recipes.length === 0 ? "No custom recipes yet" : "No recipes match"}</strong>
+          <p>{recipes.length === 0 ? "Add your gym's own recipes and they'll appear as swap options in diet plans." : "Try a different name, meal or filter."}</p>
+          {recipes.length === 0 && orgId
+            ? <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" onClick={openNew}><Plus size={14} /> New recipe</button>
+            : <button type="button" className="ps-btn ps-btn--secondary ps-btn--sm" onClick={clearAll}>Clear filters</button>}
         </div>
       ) : (
-        <div className="db-card db-meallist">
+        <div className="rl-grid">
           {filtered.map((r) => {
-            const isExpanded = expandedId === r.recipe_id;
-            const eyebrow = (r.meal_type ?? []).map((mt) => MEAL_LABELS[mt] ?? mt).join(" · ");
+            const open = expandedId === r.recipe_id;
             const { hasMacros, rows } = macroBreakdown(r);
-            const sub = [
-              r.cuisine,
-              hasMacros ? `P ${r1(r.protein_g ?? 0)}g · C ${r1(r.carbs_g ?? 0)}g · F ${r1(r.fat_g ?? 0)}g` : null,
-            ].filter(Boolean).join(" · ");
-            const meta = [
-              r.fiber_g ? `${r1(r.fiber_g)} g fiber` : null,
-              r.prep_time_minutes ? `${r.prep_time_minutes} min prep` : null,
-            ].filter(Boolean).join(" · ");
-            const flags = [
-              r.is_high_protein && "High protein",
-              r.is_low_gi && "Low GI",
-              r.is_diabetic_friendly && "Diabetic friendly",
-              r.is_gerd_safe && "GERD safe",
-              r.is_simple && "Simple / quick",
-            ].filter(Boolean) as string[];
+            const flags = [r.is_high_protein && "High protein", r.is_low_gi && "Low GI", r.is_diabetic_friendly && "Diabetic friendly", r.is_gerd_safe && "GERD safe", r.is_simple && "Quick"].filter(Boolean) as string[];
             const diets = (r.diet_type ?? []).map((d) => DIET_LABELS[d] ?? d);
-
             return (
-              <div key={r.recipe_id} className="db-mealrow-wrap" data-open={isExpanded}>
-                <button
-                  type="button"
-                  className="db-mealrow-head"
-                  aria-expanded={isExpanded}
-                  onClick={() => setExpandedId(isExpanded ? null : r.recipe_id)}
-                >
-                  <div style={{ minWidth: 0 }}>
-                    {eyebrow && <div className="db-mealrow-eyebrow">{eyebrow}</div>}
-                    <div className="db-mealrow-name">{r.recipe_name}</div>
-                    {sub && <div className="db-mealrow-sub">{sub}</div>}
-                  </div>
-                  <div className="db-mealrow-kcal">
-                    {r.calories_kcal ? <>{Math.round(r.calories_kcal)}<span>kcal</span></> : "—"}
-                  </div>
-                  <span className="db-meal-chev">{isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
+              <article key={r.recipe_id} className="rl-card" data-open={open}>
+                <button type="button" className="rl-main" aria-expanded={open} onClick={() => setExpandedId(open ? null : r.recipe_id)}>
+                  <span className="rl-meals">{(r.meal_type ?? []).map((mt) => <i key={mt}>{MEAL_LABELS[mt] ?? mt}</i>)}</span>
+                  <span className="rl-name">{r.recipe_name}</span>
+                  <span className="rl-meta">{[r.cuisine, r.serving_size_description, r.prep_time_minutes ? `${r.prep_time_minutes} min` : null].filter(Boolean).join(" · ") || "\u00a0"}</span>
+                  <span className="rl-kcal"><Flame size={14} /><b>{r.calories_kcal ? Math.round(r.calories_kcal) : "—"}</b> kcal
+                    <span className="rl-mac">P {r1(r.protein_g ?? 0)} · C {r1(r.carbs_g ?? 0)} · F {r1(r.fat_g ?? 0)}</span></span>
+                  <MacroSplit p={r.protein_g ?? 0} c={r.carbs_g ?? 0} f={r.fat_g ?? 0} height={6} />
+                  {(flags.length > 0 || diets.length > 0) && (
+                    <span className="rl-tags">{flags.slice(0, 3).map((x) => <i key={x}>{x}</i>)}{diets.slice(0, 1).map((x) => <i key={x} className="rl-diet">{x}</i>)}</span>
+                  )}
+                  <span className="rl-chev">{open ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</span>
                 </button>
 
-                {isExpanded && (
-                  <div className="db-meal-body">
-                    <div className="db-card db-daysum" style={{ marginBottom: 16 }}>
-                      <div className="db-daysum-main">
-                        <div className="db-daysum-label">
-                          Per serving{r.serving_size_description ? ` · ${r.serving_size_description}` : ""}
-                        </div>
-                        <div className="db-daysum-value">
-                          {r.calories_kcal ? Math.round(r.calories_kcal) : "—"}<span>kcal</span>
-                        </div>
-                        {meta && <div className="db-daysum-sub">{meta}</div>}
-                        {hasMacros && (
-                          <>
-                            <div className="db-splitbar" aria-hidden="true">
-                              {rows.map((m) => (
-                                <span key={m.key} className={m.cls} style={{ flexGrow: Math.max(m.share, 0.001) }} />
-                              ))}
-                            </div>
-                            <div className="db-splitlegend">
-                              {rows.map((m) => (
-                                <span key={m.key} className={m.cls}><i />{m.label} {Math.round(m.share * 100)}%</span>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                      <div className="db-daysum-macros">
+                {open && (
+                  <div className="rl-detail">
+                    {hasMacros && (
+                      <div className="rl-macros">
                         {rows.map((m) => (
-                          <div key={m.key} className={m.cls}>
-                            <div className="db-mxrow-top">
-                              <span className="db-mxrow-name"><i />{m.label}</span>
-                              <span className="db-mxrow-val">{r1(m.grams)}<small>g</small></span>
-                            </div>
-                            <div className="db-mxrow-track"><span style={{ transform: `scaleX(${m.share})` }} /></div>
+                          <div key={m.key} style={{ ["--mc" as string]: m.key === "p" ? MACRO_COLOR.p : m.key === "c" ? MACRO_COLOR.c : MACRO_COLOR.f } as React.CSSProperties}>
+                            <small><i />{m.label}</small><b>{r1(m.grams)}<em>g</em></b><span>{Math.round(m.share * 100)}% of kcal</span>
                           </div>
                         ))}
-                      </div>
-                    </div>
-
-                    {(flags.length > 0 || diets.length > 0) && (
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 16 }}>
-                        {flags.map((x) => <span key={x} className="db-pill db-pill--green">{x}</span>)}
-                        {diets.map((x) => <span key={x} className="db-pill db-pill--muted">{x}</span>)}
+                        {r.fiber_g ? <div style={{ ["--mc" as string]: "#8e8e93" } as React.CSSProperties}><small><i />Fibre</small><b>{r1(r.fiber_g)}<em>g</em></b><span>per serving</span></div> : null}
                       </div>
                     )}
-
                     {r.ingredients && r.ingredients.length > 0 && (
-                      <div style={{ marginBottom: 16 }}>
-                        <div className="db-planmeal-type" style={{ marginBottom: 6 }}>
-                          Ingredients{(r.servings_per_batch ?? 1) > 1 ? ` · makes ${r.servings_per_batch} servings` : ""}
+                      <div className="rl-sec">
+                        <h4>Ingredients{(r.servings_per_batch ?? 1) > 1 ? ` · makes ${r.servings_per_batch} servings` : ""}</h4>
+                        <div className="rl-ings">
+                          {r.ingredients.map((ing, i) => (
+                            <span key={i}><b>{storedName(ing)}</b>{ing.is_optional && <em>optional</em>}<small>{ing.quantity_grams} g</small></span>
+                          ))}
                         </div>
-                        {r.ingredients.map((ing, i) => (
-                          <div
-                            key={i}
-                            style={{
-                              display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-                              padding: "8px 0", fontSize: 13.5,
-                              borderTop: i === 0 ? "none" : "1px solid var(--db-border)",
-                            }}
-                          >
-                            <span style={{ minWidth: 0, color: "var(--text-primary)" }}>
-                              {storedName(ing)}
-                              {ing.is_optional && <span className="db-pill db-pill--muted" style={{ marginLeft: 8 }}>Optional</span>}
-                            </span>
-                            <span style={{ color: "var(--text-secondary)", fontVariantNumeric: "tabular-nums", flexShrink: 0 }}>
-                              {ing.quantity_grams} g
-                            </span>
-                          </div>
-                        ))}
                       </div>
                     )}
-
-                    {r.method && (
-                      <div style={{ marginBottom: 16 }}>
-                        <div className="db-planmeal-type" style={{ marginBottom: 6 }}>Method</div>
-                        <p className="db-prose">{r.method}</p>
-                      </div>
-                    )}
-
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-                      <span className="db-card-sub" style={{ marginTop: 0 }}>
-                        Added {r.created_at ? formatDate(r.created_at) : "—"}
-                      </span>
-                      <div style={{ display: "flex", gap: 8 }}>
-                        <button
-                          type="button"
-                          className="ps-btn ps-btn--secondary ps-btn--sm"
-                          style={{ color: "var(--red)" }}
-                          onClick={() => deleteRecipe(r.recipe_id)}
-                          disabled={deleting === r.recipe_id}
-                        >
-                          {deleting === r.recipe_id ? <Loader2 size={14} className="ps-spin" /> : <Trash2 size={14} />}
-                          <span>Delete</span>
-                        </button>
-                        <button
-                          type="button"
-                          className="ps-btn ps-btn--secondary ps-btn--sm"
-                          onClick={() => { setEditRecipe(r); setSheetOpen(true); }}
-                        >
-                          <Pencil size={14} /> <span>Edit recipe</span>
-                        </button>
-                      </div>
+                    {r.method && <div className="rl-sec"><h4>Method</h4><p>{r.method}</p></div>}
+                    {diets.length > 0 && <div className="rl-tags">{diets.map((x) => <i key={x} className="rl-diet">{x}</i>)}</div>}
+                    <div className="rl-actions">
+                      <span>Added {r.created_at ? formatDate(r.created_at) : "—"}</span>
+                      <button type="button" className="rl-btn rl-btn--danger" onClick={() => deleteRecipe(r.recipe_id)} disabled={deleting === r.recipe_id}>
+                        {deleting === r.recipe_id ? <Loader2 size={14} className="ps-spin" /> : <Trash2 size={14} />}Delete
+                      </button>
+                      <button type="button" className="rl-btn rl-btn--primary" onClick={() => { setEditRecipe(r); setSheetOpen(true); }}><Pencil size={14} />Edit recipe</button>
                     </div>
                   </div>
                 )}
-              </div>
+              </article>
             );
           })}
         </div>
@@ -910,3 +860,74 @@ export default function GymRecipesPage() {
     </div>
   );
 }
+
+// NOTE: no backticks inside this CSS.
+const RL_CSS = `
+.rl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; align-items: start; grid-auto-flow: dense; }
+.rl-card { background: #fff; border: 1px solid var(--dt-line); border-radius: 16px; overflow: hidden; transition: box-shadow 160ms, border-color 160ms; }
+.rl-card:hover { border-color: #c9d8f0; box-shadow: 0 12px 28px -18px rgba(10,60,160,0.45); }
+.rl-card[data-open="true"] { grid-column: 1 / -1; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
+.rl-main { position: relative; display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 14px 16px; border: none; background: none; font: inherit; text-align: left; cursor: pointer; color: inherit; }
+.rl-card[data-open="true"] .rl-main { border-bottom: 1px solid var(--dt-line); background: #fafcff; }
+.rl-meals { display: flex; gap: 4px; flex-wrap: wrap; padding-right: 26px; min-height: 18px; }
+.rl-meals i { font-style: normal; font-size: 10.5px; font-weight: 750; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+.rl-meals i + i::before { content: "· "; color: var(--text-tertiary); }
+.rl-name { font-size: 15.5px; font-weight: 720; letter-spacing: -0.015em; line-height: 1.25; }
+.rl-meta { font-size: 12.5px; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rl-kcal { display: flex; align-items: center; gap: 5px; margin-top: 2px; font-size: 13px; color: var(--text-tertiary); }
+.rl-kcal svg { color: var(--accent); }
+.rl-kcal b { font-size: 19px; font-weight: 780; color: var(--text-primary); }
+.rl-mac { margin-left: auto; font-size: 12px; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.rl-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.rl-tags i { font-style: normal; height: 20px; padding: 0 8px; border-radius: 10px; display: inline-flex; align-items: center; font-size: 11px; font-weight: 650; background: #e8f1ff; color: #0a66d6; }
+.rl-tags i.rl-diet { background: #f0f2f5; color: var(--text-secondary); }
+.rl-chev { position: absolute; top: 12px; right: 12px; color: var(--text-tertiary); }
+
+.rl-detail { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px 16px; }
+.rl-macros { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; }
+.rl-macros > div { display: flex; flex-direction: column; gap: 1px; padding: 10px 12px; border-radius: 12px; background: #f6f8fc; }
+.rl-macros small { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
+.rl-macros small i { width: 8px; height: 8px; border-radius: 2px; background: var(--mc); }
+.rl-macros b { font-size: 22px; font-weight: 780; }
+.rl-macros b em { font-style: normal; font-size: 13px; color: var(--text-tertiary); margin-left: 2px; }
+.rl-macros span { font-size: 12px; color: var(--text-tertiary); }
+.rl-sec h4 { margin: 0 0 8px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); }
+.rl-sec p { margin: 0; font-size: 13.5px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; }
+.rl-ings { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px; }
+.rl-ings span { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--dt-line); font-size: 13px; }
+.rl-ings b { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rl-ings em { font-style: normal; font-size: 11px; color: var(--text-tertiary); }
+.rl-ings small { font-size: 12.5px; font-weight: 650; color: var(--accent); font-variant-numeric: tabular-nums; }
+.rl-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--dt-line); }
+.rl-actions > span { margin-right: auto; font-size: 12.5px; color: var(--text-tertiary); }
+.rl-btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 13px; border-radius: 10px; border: 1px solid var(--dt-line); background: #fff; font: inherit; font-size: 13px; font-weight: 650; cursor: pointer; }
+.rl-btn--danger { color: #c4001a; }
+.rl-btn--danger:hover { background: #fff0f1; border-color: #ffd0d6; }
+.rl-btn--primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+@media (max-width: 760px) {
+  .rl-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+  .rl-actions .rl-btn { flex: 1; justify-content: center; }
+}
+`;
+
+// NOTE: no backticks inside this CSS.
+const AI_CSS = `
+.ai-opts { display: flex; flex-direction: column; gap: 10px; margin: 12px 0 4px; }
+.ai-opt-row { display: flex; align-items: flex-start; gap: 10px; }
+.ai-opt-label { flex: 0 0 38px; padding-top: 8px; font-size: 12px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
+.ai-opt-row .db-presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; }
+.db-ai-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 12px; }
+.ai-credits { display: inline-flex; align-items: center; gap: 8px; padding: 5px 10px; border-radius: 10px; background: #eef4ff; color: #0b4e98; font-size: 12.5px; }
+.ai-credits b { font-weight: 780; }
+.ai-credits-bar { width: 70px; height: 6px; border-radius: 4px; background: #d6e3f8; overflow: hidden; }
+.ai-credits-bar i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #0a66d6, #3c4fe0); }
+.ai-credits[data-low="true"] { background: #fff4e5; color: #8a4500; }
+.ai-credits[data-low="true"] .ai-credits-bar i { background: #ff9f0a; }
+.ai-out { margin-top: 10px; padding: 9px 12px; border-radius: 10px; background: #fff4e5; color: #8a4500; font-size: 13px; }
+@media (max-width: 640px) {
+  .ai-opt-row { flex-direction: column; gap: 6px; }
+  .ai-opt-label { padding-top: 0; }
+  .ai-credits { width: 100%; }
+  .ai-credits-bar { flex: 1; }
+}
+`;

@@ -3,9 +3,12 @@
 // Exercise library: every built-in + gym exercise, with categories, media, and gym categories.
 
 import { useEffect, useMemo, useState } from "react"
+import type { Equipment } from "@/lib/workout/types"
 import {
   Plus, Search, Dumbbell, Library, Tag, Tags, Video, Pencil, Copy, Archive, ArchiveRestore, Trash2, Check, Loader2,
+  ImageIcon, LayoutGrid, Rows3, Sparkles,
 } from "lucide-react"
+import { WorkoutStyles, MUSCLE_COLOR } from "../components/WorkoutTheme"
 import { DesignStyles } from "../../components/DesignSystem"
 import { Sheet } from "../../components/Sheet"
 import { Skeleton } from "../../components/ui"
@@ -27,18 +30,23 @@ type Source = "all" | "builtin" | "mine"
 function ExerciseCard({ ex, cats, onOpen }: { ex: WorkoutExercise; cats: CategoriesApi; onOpen: () => void }) {
   const [failed, setFailed] = useState(false)
   const src = exerciseImage(ex)
+  const mc = MUSCLE_COLOR[ex.muscle_group] ?? "#8e8e93"
   return (
-    <button type="button" className="db-card db-ex" data-archived={ex.is_active === false} onClick={onOpen}>
-      <div className="db-ex-cover">
-        {src && !failed ? <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} /> : <Dumbbell size={30} strokeWidth={1.8} />}
-        <span className={`db-ex-flag${ex.org_id ? " db-ex-flag--mine" : ""}`}>
+    <button type="button" className="xl-card" data-archived={ex.is_active === false} onClick={onOpen} style={{ ["--mc" as string]: mc } as React.CSSProperties}>
+      <div className="xl-cover">
+        {src && !failed
+          ? <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />
+          : <span className="xl-noimg"><Dumbbell size={30} strokeWidth={1.8} /></span>}
+        <span className="xl-shade" aria-hidden />
+        <span className={`xl-flag${ex.org_id ? " xl-flag--mine" : ""}${ex.is_active === false ? " xl-flag--arch" : ""}`}>
           {ex.is_active === false ? "Archived" : ex.org_id ? "Yours" : "Built-in"}
         </span>
-        {ex.video_url && <span className="db-ex-video" aria-label="Has video"><Video size={13} /></span>}
+        {ex.video_url && <span className="xl-video" aria-label="Has video"><Video size={13} /></span>}
+        <span className="xl-muscle"><i />{MUSCLE_GROUP_LABELS[ex.muscle_group] ?? ex.muscle_group}</span>
       </div>
-      <div className="db-ex-body">
-        <div className="db-ex-name">{ex.name}</div>
-        <div className="db-ex-meta">{MUSCLE_GROUP_LABELS[ex.muscle_group] ?? ex.muscle_group} · {EQUIPMENT_LABELS[ex.equipment] ?? ex.equipment}</div>
+      <div className="xl-body">
+        <div className="xl-name">{ex.name}</div>
+        <div className="xl-meta">{EQUIPMENT_LABELS[ex.equipment] ?? ex.equipment} · {MOVEMENT_LABELS[ex.movement_type] ?? ex.movement_type}</div>
         <CategoryTags slugs={ex.category} cats={cats} max={2} />
       </div>
     </button>
@@ -226,6 +234,10 @@ export default function ExercisesPage() {
   const [muscle, setMuscle] = useState<MuscleGroup | "all">("all")
   const [category, setCategory] = useState<string | null>(null)
   const [showArchived, setShowArchived] = useState(false)
+  const [equipment, setEquipment] = useState<Equipment | "all">("all")
+  const [mediaOnly, setMediaOnly] = useState(false)
+  const [sort, setSort] = useState<"name" | "mine" | "recent">("name")
+  const [dense, setDense] = useState(false)
 
   const [detail, setDetail] = useState<WorkoutExercise | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
@@ -255,15 +267,26 @@ export default function ExercisesPage() {
     return m
   }, [live])
 
+  const muscleCounts = useMemo(() => {
+    const m: Record<string, number> = {}
+    live.forEach((e) => { m[e.muscle_group] = (m[e.muscle_group] ?? 0) + 1 })
+    return m
+  }, [live])
+
   const filtered = useMemo(() => {
     const term = q.trim().toLowerCase()
-    return (showArchived ? exercises : live).filter((ex) =>
-      (!term || ex.name.toLowerCase().includes(term)) &&
+    const r = (showArchived ? exercises : live).filter((ex) =>
+      (!term || ex.name.toLowerCase().includes(term) || (ex.description ?? "").toLowerCase().includes(term)) &&
       (source === "all" || (source === "mine" ? !!ex.org_id : !ex.org_id)) &&
       (muscle === "all" || ex.muscle_group === muscle) &&
+      (equipment === "all" || ex.equipment === equipment) &&
+      (!mediaOnly || !!(ex.image_url || ex.video_url)) &&
       (!category || (ex.category ?? []).includes(category))
     )
-  }, [exercises, live, showArchived, q, source, muscle, category])
+    if (sort === "mine") return [...r].sort((a, b) => Number(!!b.org_id) - Number(!!a.org_id) || a.name.localeCompare(b.name))
+    if (sort === "recent") return [...r].sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""))
+    return r
+  }, [exercises, live, showArchived, q, source, muscle, equipment, mediaOnly, sort, category])
 
   const stats = {
     total: live.length,
@@ -294,58 +317,70 @@ export default function ExercisesPage() {
     setDetail(updated)
   }
 
-  return (
-    <div className="ps-page db">
-      <DesignStyles />
+  const anyFilter = !!q || source !== "all" || muscle !== "all" || equipment !== "all" || mediaOnly || !!category
 
-      <header className="db-header">
-        <div style={{ minWidth: 0 }}>
-          <div className="db-kicker">Coaching</div>
-          <h1 className="db-title">Exercises</h1>
-          <p className="db-subtitle">
-            {loading ? "\u00a0" : <><strong>{stats.total}</strong> in your library · <strong>{stats.mine}</strong> made by your gym</>}
-          </p>
+  return (
+    <div className="ps-page db wk">
+      <DesignStyles />
+      <WorkoutStyles />
+      <style>{XL_CSS}</style>
+
+      <header className="wk-head">
+        <div className="wk-title">
+          <span className="wk-title-icon wk-title-icon--ex"><Library size={21} /></span>
+          <div>
+            <h1>Exercises</h1>
+            <p>{loading ? "\u00a0" : `${stats.total} in your library · ${stats.mine} made by your gym`}</p>
+          </div>
         </div>
-        <div className="db-header-actions">
+        <div className="wk-kpis">
+          <div className="wk-kpi"><span className="wk-kpi-icon wk-tone-blue"><Library size={15} /></span><div><small>In library</small><b>{loading ? "–" : stats.total}</b></div></div>
+          <div className="wk-kpi"><span className="wk-kpi-icon wk-tone-purple"><Sparkles size={15} /></span><div><small>Your exercises</small><b>{loading ? "–" : stats.mine}</b></div></div>
+          <div className="wk-kpi"><span className="wk-kpi-icon wk-tone-green"><Tag size={15} /></span><div><small>Categories</small><b>{cats.loaded ? stats.categories : "–"}</b></div></div>
+          <div className="wk-kpi"><span className="wk-kpi-icon wk-tone-amber"><Video size={15} /></span><div><small>With your media</small><b>{loading ? "–" : stats.media}</b></div></div>
+        </div>
+        <div className="wk-actions">
           <button type="button" className="ps-btn ps-btn--secondary" onClick={() => setCatsOpen(true)}><Tags size={16} /><span>Categories</span></button>
           <button type="button" className="ps-btn ps-btn--primary" onClick={() => openForm("create", null)}><Plus size={16} strokeWidth={2.4} /><span>New exercise</span></button>
         </div>
       </header>
 
-      <div className="db-card db-statbar">
-        <div className="db-stat db-tone-blue">
-          <span className="db-chip"><Library size={16} /></span>
-          <div style={{ minWidth: 0 }}><div className="db-stat-label">In library</div><div className="db-stat-value">{loading ? "–" : stats.total}</div></div>
-        </div>
-        <div className="db-stat db-tone-purple">
-          <span className="db-chip"><Dumbbell size={16} /></span>
-          <div style={{ minWidth: 0 }}><div className="db-stat-label">Your exercises</div><div className="db-stat-value">{loading ? "–" : stats.mine}</div></div>
-        </div>
-        <div className="db-stat db-tone-green">
-          <span className="db-chip"><Tag size={16} /></span>
-          <div style={{ minWidth: 0 }}><div className="db-stat-label">Categories</div><div className="db-stat-value">{cats.loaded ? stats.categories : "–"}</div></div>
-        </div>
-        <div className="db-stat db-tone-blue">
-          <span className="db-chip"><Video size={16} /></span>
-          <div style={{ minWidth: 0 }}><div className="db-stat-label">With demo media</div><div className="db-stat-value">{loading ? "–" : stats.media}</div></div>
-        </div>
-      </div>
-
-      <div className="db-card db-toolbar" style={{ flexDirection: "column", alignItems: "stretch" }}>
-        <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
-          <div className="dz-tabs db-segtabs" role="tablist">
+      <div className="wk-toolbar">
+        <div className="wk-row">
+          <div className="wk-seg" role="tablist">
             {([["all", "All", stats.total], ["builtin", "Built-in", stats.total - stats.mine], ["mine", "Yours", stats.mine]] as [Source, string, number][]).map(([k, label, n]) => (
-              <button key={k} type="button" role="tab" aria-selected={source === k} className="dz-tab" onClick={() => setSource(k)}>{label} <span>{n}</span></button>
+              <button key={k} type="button" role="tab" aria-selected={source === k} onClick={() => setSource(k)}>{label} <span>{n}</span></button>
             ))}
           </div>
-          <div className="db-search">
-            <Search size={16} />
-            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search exercises" aria-label="Search exercises" />
-          </div>
-          <select className="db-select" value={muscle} onChange={(e) => setMuscle(e.target.value as MuscleGroup | "all")} aria-label="Muscle group">
-            <option value="all">All muscles</option>
-            {(Object.keys(MUSCLE_GROUP_LABELS) as MuscleGroup[]).map((m) => <option key={m} value={m}>{MUSCLE_GROUP_LABELS[m]}</option>)}
+          <label className="wk-search"><Search size={16} />
+            <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search names and coaching cues" aria-label="Search exercises" />
+          </label>
+          <select className="wk-select" value={equipment} onChange={(e) => setEquipment(e.target.value as Equipment | "all")} aria-label="Equipment">
+            <option value="all">All equipment</option>
+            {(Object.keys(EQUIPMENT_LABELS) as Equipment[]).map((k) => <option key={k} value={k}>{EQUIPMENT_LABELS[k]}</option>)}
           </select>
+          <select className="wk-select" value={sort} onChange={(e) => setSort(e.target.value as "name" | "mine" | "recent")} aria-label="Sort">
+            <option value="name">Name A–Z</option>
+            <option value="mine">Yours first</option>
+            <option value="recent">Recently added</option>
+          </select>
+          <button type="button" className="wk-chip" aria-pressed={mediaOnly} onClick={() => setMediaOnly((v) => !v)} style={{ ["--chip" as string]: "var(--accent)" } as React.CSSProperties}>
+            <ImageIcon size={14} /> Has your media
+          </button>
+          <div className="wk-seg" aria-label="Card size">
+            <button type="button" aria-pressed={!dense} onClick={() => setDense(false)} aria-label="Large cards"><LayoutGrid size={15} /></button>
+            <button type="button" aria-pressed={dense} onClick={() => setDense(true)} aria-label="Compact cards"><Rows3 size={15} /></button>
+          </div>
+        </div>
+
+        <div className="wk-chips" role="group" aria-label="Filter by muscle">
+          <button type="button" className="wk-chip" aria-pressed={muscle === "all"} onClick={() => setMuscle("all")}>All muscles <em>{stats.total}</em></button>
+          {(Object.keys(MUSCLE_GROUP_LABELS) as MuscleGroup[]).map((m) => (
+            <button key={m} type="button" className="wk-chip" aria-pressed={muscle === m} onClick={() => setMuscle(muscle === m ? "all" : m)}
+              style={{ ["--chip" as string]: MUSCLE_COLOR[m] } as React.CSSProperties}>
+              <i style={{ background: MUSCLE_COLOR[m] }} />{MUSCLE_GROUP_LABELS[m]} <em>{muscleCounts[m] ?? 0}</em>
+            </button>
+          ))}
         </div>
 
         <div className="db-catpick" role="group" aria-label="Filter by category">
@@ -362,27 +397,29 @@ export default function ExercisesPage() {
           <button type="button" className="db-catopt db-catopt--new" onClick={() => setCatsOpen(true)}><Plus size={14} strokeWidth={2.6} />New category</button>
         </div>
 
-        {archivedCount > 0 && (
-          <label className="db-plan-toggle" style={{ alignSelf: "flex-start" }}>
-            <input type="checkbox" className="db-switch" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
-            Show {archivedCount} archived
-          </label>
-        )}
+        <div className="xl-foot">
+          <span>{loading ? "" : `Showing ${filtered.length} of ${showArchived ? exercises.length : stats.total}`}</span>
+          {anyFilter && <button type="button" className="xl-clear" onClick={() => { setQ(""); setSource("all"); setMuscle("all"); setEquipment("all"); setMediaOnly(false); setCategory(null) }}>Clear filters</button>}
+          {archivedCount > 0 && (
+            <label className="db-plan-toggle" style={{ marginLeft: "auto" }}>
+              <input type="checkbox" className="db-switch" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+              Show {archivedCount} archived
+            </label>
+          )}
+        </div>
       </div>
 
       {loading ? (
-        <div className="db-exgrid">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} w="100%" h={250} r={20} />)}</div>
+        <div className="xl-grid" data-dense={dense}>{Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} w="100%" h={dense ? 190 : 260} r={18} />)}</div>
       ) : filtered.length === 0 ? (
-        <div className="db-card db-pad">
-          <div className="db-empty">
-            <div className="db-empty-icon"><Dumbbell size={18} /></div>
-            <div className="db-empty-title">{source === "mine" && stats.mine === 0 ? "No exercises of your own yet" : "No exercises match"}</div>
-            <div className="db-empty-text">{source === "mine" && stats.mine === 0 ? "Create one, or customize a built-in exercise." : "Try another search, muscle or category."}</div>
-            <button type="button" className="ps-btn ps-btn--primary" style={{ marginTop: 14 }} onClick={() => openForm("create", null)}><Plus size={15} /><span>New exercise</span></button>
-          </div>
+        <div className="wk-empty">
+          <span className="wk-empty-icon"><Dumbbell size={20} /></span>
+          <strong>{source === "mine" && stats.mine === 0 ? "No exercises of your own yet" : "No exercises match"}</strong>
+          <p>{source === "mine" && stats.mine === 0 ? "Create one, or customize a built-in exercise." : "Try another search, muscle or category."}</p>
+          <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" onClick={() => openForm("create", null)}><Plus size={14} /> New exercise</button>
         </div>
       ) : (
-        <div className="db-exgrid">
+        <div className="xl-grid" data-dense={dense}>
           {filtered.map((ex) => (
             <ExerciseCard key={ex.id} ex={ex} cats={cats} onOpen={() => { setDetail(ex); setDetailOpen(true) }} />
           ))}
@@ -403,3 +440,39 @@ export default function ExercisesPage() {
     </div>
   )
 }
+
+// NOTE: no backticks inside this CSS.
+const XL_CSS = `
+.xl-foot { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--text-tertiary); flex-wrap: wrap; }
+.xl-clear { border: none; background: none; font: inherit; font-size: 12.5px; font-weight: 650; color: var(--accent); cursor: pointer; padding: 0; }
+.xl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.xl-grid[data-dense="true"] { grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 10px; }
+.xl-card { display: flex; flex-direction: column; padding: 0; border: 1px solid var(--wk-line); border-radius: 18px; background: #fff; overflow: hidden; font: inherit; text-align: left; cursor: pointer; transition: box-shadow 160ms, transform 160ms; }
+.xl-card:hover { box-shadow: 0 14px 30px -16px rgba(15,23,42,0.4); transform: translateY(-2px); }
+.xl-card[data-archived="true"] { opacity: 0.55; }
+.xl-cover { position: relative; aspect-ratio: 4 / 3; background: #eef2f8; overflow: hidden; }
+.xl-cover img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 300ms ease; }
+.xl-card:hover .xl-cover img { transform: scale(1.04); }
+.xl-noimg { position: absolute; inset: 0; display: grid; place-items: center; color: var(--mc); opacity: 0.6; }
+.xl-shade { position: absolute; inset: auto 0 0 0; height: 55%; background: linear-gradient(180deg, transparent, rgba(0,0,0,0.55)); pointer-events: none; }
+.xl-flag { position: absolute; top: 10px; left: 10px; height: 22px; padding: 0 9px; border-radius: 11px; display: inline-flex; align-items: center; font-size: 11px; font-weight: 700; background: rgba(255,255,255,0.92); color: var(--text-secondary); backdrop-filter: blur(6px); }
+.xl-flag--mine { background: var(--accent, #0a66d6); color: #fff; }
+.xl-flag--arch { background: #1c1c1e; color: #fff; }
+.xl-video { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: rgba(0,0,0,0.55); color: #fff; }
+.xl-muscle { position: absolute; left: 10px; bottom: 10px; display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 12px; font-size: 12px; font-weight: 700; color: #fff; background: rgba(0,0,0,0.35); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.25); }
+.xl-muscle i { width: 8px; height: 8px; border-radius: 50%; background: var(--mc); box-shadow: 0 0 0 2px rgba(255,255,255,0.6); }
+.xl-body { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px 14px; border-top: 3px solid var(--mc); }
+.xl-name { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.xl-meta { font-size: 12.5px; color: var(--text-tertiary); }
+.xl-grid[data-dense="true"] .xl-body { padding: 9px 11px 11px; gap: 4px; }
+.xl-grid[data-dense="true"] .xl-name { font-size: 13.5px; }
+.xl-grid[data-dense="true"] .db-cats { display: none; }
+@media (max-width: 760px) {
+  .xl-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .xl-grid[data-dense="true"] { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+  .xl-grid[data-dense="true"] .xl-meta, .xl-grid[data-dense="true"] .xl-muscle { display: none; }
+  .xl-body { padding: 10px 11px 12px; }
+  .xl-name { font-size: 13.5px; }
+  .db-catpick { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+}
+`

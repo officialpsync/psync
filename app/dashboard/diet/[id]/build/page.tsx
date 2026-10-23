@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabase"
 import { BackLink, formatDate, Skeleton, useToast } from "../../../components/ui"
 import { Sheet } from "../../../components/Sheet"
 import { DesignStyles } from "../../../components/DesignSystem"
+import { DietStyles } from "../../components/DietTheme"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -525,8 +526,8 @@ export default function ManualPlanBuilderPage() {
 
   if (loading) {
     return (
-      <div className="ps-page ps-page--narrow db">
-        <DesignStyles />
+      <div className="ps-page db dt">
+        <DesignStyles /><DietStyles />
         <Skeleton w={60} h={16} />
         <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 12 }}>
           <Skeleton w={280} h={32} r={8} />
@@ -541,8 +542,8 @@ export default function ManualPlanBuilderPage() {
 
   if (!meta) {
     return (
-      <div className="ps-page ps-page--narrow db">
-        <DesignStyles />
+      <div className="ps-page db dt">
+        <DesignStyles /><DietStyles />
         <BackLink onClick={() => router.back()} label="Back" />
         <div className="db-card db-pad">
           <div className="db-empty">
@@ -556,8 +557,8 @@ export default function ManualPlanBuilderPage() {
   const memberName = meta.members?.full_name ?? "Member"
 
   return (
-    <div className="ps-page ps-page--narrow db">
-      <DesignStyles />
+    <div className="ps-page db dt">
+      <DesignStyles /><DietStyles />
       <BackLink onClick={() => router.back()} label="Back" />
 
       <header className="db-header">

@@ -1017,8 +1017,9 @@ export default function DashboardPage() {
   ];
 
   return (
-    <div className={clsx("ps-page db", editing && "dz-editing")}>
+    <div className={clsx("ps-page db ov", editing && "dz-editing")}>
       <DesignStyles />
+      <style>{OV_CSS}</style>
 
       <header className="db-header db-in">
         <div style={{ minWidth: 0 }}>
@@ -1204,3 +1205,51 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+/* Overview: same 18px gutter as Members and Leads, full width, and a denser layout so more fits on one screen.
+   NOTE: no backticks inside this CSS. */
+const OV_CSS = `
+.ps-page.ov { max-width: none !important; margin: 0 !important; padding: 18px !important; }
+.db.ov { max-width: none; }
+
+.ov .db-header { align-items: center; margin-bottom: 12px; gap: 12px; }
+.ov .db-kicker { font-size: 11.5px; margin-bottom: 2px; }
+.ov .db-title { font-size: 24px; }
+.ov .db-subtitle { font-size: 13.5px; margin-top: 2px; }
+.ov .db-header-actions .ps-btn { height: 34px; padding: 0 12px; font-size: 13.5px; }
+
+.ov .dz-grid { gap: 12px; margin-bottom: 0; }
+.ov .dz-editbar { margin-bottom: 12px; }
+
+.ov .db-pad { padding: 14px 16px; }
+.ov .db-card-head { margin-bottom: 10px; }
+.ov .db-card-title { font-size: 15px; }
+.ov .db-chart { height: 200px; }
+.ov .db-chart--sm { height: 170px; }
+
+.ov .db-hero { padding: 16px; gap: 12px; }
+.ov .db-ring { transform: scale(0.86); transform-origin: center; }
+
+.ov .db-row { min-height: 44px; padding: 6px 8px; gap: 10px; }
+.ov .db-rows { gap: 0; }
+
+.ov .dz-strip { padding: 0; }
+.ov .dz-strip-head { padding: 2px 2px 8px; }
+.ov .dz-cells { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.ov .dz-cell { padding: 10px 12px; gap: 4px; }
+.ov .dz-cell-value { font-size: 19px; }
+
+.ov .dz-actions-head { margin-bottom: 8px; }
+.ov .db-empty { padding: 18px 8px; }
+
+@media (max-width: 760px) {
+  .ps-page.ov { padding: 10px !important; }
+  .ov .db-header { margin-bottom: 10px; }
+  .ov .db-title { font-size: 22px; }
+  .ov .db-header-actions .ps-btn { height: 38px; }
+  .ov .dz-grid { gap: 10px; }
+  .ov .dz-cells { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ov .db-pad { padding: 12px 14px; }
+  .ov .db-chart { height: 180px; }
+}
+`;

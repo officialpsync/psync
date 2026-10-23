@@ -1131,6 +1131,196 @@ export const SIDEBAR_CSS = `
   .db-sb-sub,.db-sb-caret,.db-sb-sublist{transition:none}
   .db-sb-brand:active,.db-sb-item:active,.db-sb-iconbtn:active,.db-sb-tab:active{transform:none}
 }
+
+/* ── Exercise grid & card (app/dashboard/workouts/exercises) ──────────────── */
+
+.db-exgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+@media (max-width: 760px) {
+  .db-exgrid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+}
+
+.db-ex {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 200ms var(--db-ease), box-shadow 200ms ease;
+}
+.db-ex[data-archived="true"] { opacity: 0.55; }
+@media (hover: hover) and (pointer: fine) {
+  .db-ex:hover { transform: translateY(-2px); box-shadow: var(--db-shadow-hover); }
+}
+
+.db-ex-cover {
+  position: relative;
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+  background: var(--fill);
+  color: var(--text-tertiary);
+  overflow: hidden;
+}
+.db-ex-cover img { width: 100%; height: 100%; object-fit: cover; }
+
+.db-ex-flag {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  padding: 3px 9px;
+  border-radius: var(--radius-pill, 999px);
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--text-secondary);
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(6px);
+}
+.db-ex-flag--mine { color: var(--accent); background: rgba(255,255,255,0.92); }
+
+.db-ex-video {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: rgba(0,0,0,0.45);
+  backdrop-filter: blur(6px);
+}
+
+.db-ex-body { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 6px; }
+.db-ex-name { font-size: 14.5px; font-weight: 650; letter-spacing: -0.01em; color: var(--text-primary); line-height: 1.3; }
+.db-ex-meta { font-size: 12.5px; color: var(--text-tertiary); }
+
+/* ── Exercise detail sheet (key/value grid, media, prose) ──────────────────── */
+
+.db-exdetail-media { border-radius: var(--db-r-ctl, 12px); overflow: hidden; margin-bottom: 16px; background: var(--fill); }
+.db-exdetail-media img, .db-exdetail-media video { width: 100%; display: block; }
+
+.db-kv-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; margin-bottom: 16px; }
+.db-kv { padding: 10px 12px; border-radius: var(--db-r-ctl, 12px); background: var(--fill); }
+.db-kv-label { font-size: 11px; font-weight: 650; letter-spacing: 0.03em; text-transform: uppercase; color: var(--text-tertiary); }
+.db-kv-value { font-size: 13.5px; font-weight: 600; color: var(--text-primary); margin-top: 3px; }
+
+.db-prose { font-size: 14px; line-height: 1.6; color: var(--text-secondary); white-space: pre-wrap; }
+
+/* ── Category tags, pills, picker, swatches ─────────────────────────────────
+   CategoryColor = blue | cyan | sky | teal | indigo | gray (lib/workout/types.ts) */
+
+.db-c-blue   { --t: var(--accent);      --t-dim: var(--accent-dim); }
+.db-c-cyan   { --t: #09AECF;            --t-dim: rgba(9,174,207,0.14); }
+.db-c-sky    { --t: #2F9BE0;            --t-dim: rgba(47,155,224,0.14); }
+.db-c-teal   { --t: #12B389;            --t-dim: rgba(18,179,137,0.14); }
+.db-c-indigo { --t: #5856D6;            --t-dim: rgba(88,86,214,0.14); }
+.db-c-gray   { --t: var(--text-secondary); --t-dim: var(--fill); }
+
+.db-cats { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.db-cat {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 3px 9px; border-radius: var(--radius-pill, 999px);
+  font-size: 11.5px; font-weight: 600;
+  color: var(--t); background: var(--t-dim);
+}
+.db-cat--more { color: var(--text-tertiary); background: var(--fill); }
+
+.db-catpick { display: flex; flex-wrap: wrap; gap: 8px; }
+.db-catopt {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 7px 12px; border-radius: var(--radius-pill, 999px);
+  font-size: 13px; font-weight: 600;
+  color: var(--t); background: var(--t-dim);
+  border: 1.5px solid transparent;
+  cursor: pointer; transition: border-color 150ms ease, transform 140ms var(--db-ease);
+}
+.db-catopt[aria-pressed="true"] { border-color: var(--t); }
+.db-catopt--new { color: var(--text-secondary); background: var(--fill); }
+
+.db-catnew { margin-top: 10px; padding: 12px; border-radius: var(--db-r-ctl, 12px); background: var(--fill); display: flex; flex-direction: column; gap: 10px; }
+.db-catnew-row { display: flex; gap: 8px; }
+
+.db-swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.db-swatch {
+  width: 28px; height: 28px; border-radius: 50%;
+  display: grid; place-items: center;
+  color: #fff; background: var(--t);
+  border: none; cursor: pointer;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 3px transparent;
+  transition: box-shadow 150ms ease;
+}
+.db-swatch[aria-checked="true"] { box-shadow: 0 0 0 2px #fff, 0 0 0 3px var(--t); }
+
+.db-catrow { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--db-border); }
+.db-catrow:last-child { border-bottom: none; }
+.db-catrow-name { flex: 1; }
+.db-catrow-count { font-size: 12.5px; color: var(--text-tertiary); }
+
+/* ── Media drop zones (ExerciseSheet image/video upload) ───────────────────── */
+
+.db-media { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+@media (max-width: 420px) { .db-media { grid-template-columns: 1fr; } }
+
+.db-drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; height: 120px; border-radius: var(--db-r-ctl, 12px);
+  border: 1.5px dashed var(--db-border); background: var(--fill);
+  color: var(--text-tertiary); cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+.db-drop:hover { border-color: var(--accent); background: var(--accent-dim); color: var(--accent); }
+.db-drop strong { font-size: 13px; font-weight: 600; color: inherit; }
+.db-drop span { font-size: 11.5px; }
+
+.db-drop-preview { position: relative; height: 120px; border-radius: var(--db-r-ctl, 12px); overflow: hidden; background: var(--fill); }
+.db-drop-preview img, .db-drop-preview video { width: 100%; height: 100%; object-fit: cover; }
+.db-drop-remove {
+  position: absolute; top: 6px; right: 6px; width: 24px; height: 24px;
+  display: grid; place-items: center; border-radius: 50%;
+  color: #fff; background: rgba(0,0,0,0.5); border: none; cursor: pointer;
+}
+
+/* ── Ingredient table row (app/dashboard/diet/ingredients) ─────────────────── */
+
+.db-row-plain {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  margin: 0;
+}
+.db-ing-row { align-items: flex-start; }
+
+.db-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 13.5px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+.db-num small { font-size: 11px; font-weight: 500; color: var(--text-tertiary); margin-left: 1px; }
+
+/* ── Toolbar: segmented tabs, select (used by exercises + ingredients toolbars) ── */
+
+.db-segtabs { display: inline-flex; padding: 3px; border-radius: var(--radius-pill, 999px); background: var(--fill); gap: 2px; }
+.db-select {
+  height: 40px; padding: 0 30px 0 14px; border-radius: var(--db-r-ctl, 12px);
+  border: 1px solid transparent; background: var(--fill);
+  font: inherit; font-size: 14px; font-weight: 550; color: var(--text-primary);
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238E8E93' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  cursor: pointer;
+}
 `;
 
 // Rendered by Sidebar itself so it is styled on every dashboard page,

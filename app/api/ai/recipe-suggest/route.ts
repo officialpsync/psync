@@ -121,6 +121,40 @@ async function logUsage(row: {
   }
 }
 
+/** IST midnight today, as an ISO timestamp (the daily allowance resets then). */
+function istMidnightIso() {
+  const IST = 5.5 * 60 * 60 * 1000
+  const nowIst = new Date(Date.now() + IST)
+  const midnightIst = Date.UTC(nowIst.getUTCFullYear(), nowIst.getUTCMonth(), nowIst.getUTCDate())
+  return new Date(midnightIst - IST).toISOString()
+}
+
+/**
+ * GET: how many AI recipes this gym has left today, so the form can show it before the first request.
+ * Read-only and cheap: it counts today's ai_usage rows that consumed an allowance
+ * ("ok" and "rejected"; failed calls are refunded and logged as "error").
+ */
+export async function GET(req: NextRequest) {
+  const ipLimit = await burst("ai:ip:get", clientIp(req), 60, "1 m")
+  if (!ipLimit.ok && !ipLimit.unavailable) return fail(429, "Too many requests.")
+  const auth = await getStaffContext(req.headers.get("authorization"))
+  if (!auth.ok) return fail(auth.status, auth.error)
+  const { orgId, permissions } = auth.ctx
+  if (!permissions.recipes || !permissions.ai_recipes) return fail(403, "No access to the AI recipe helper.")
+
+  const { count, error } = await adminClient()
+    .from("ai_usage")
+    .select("id", { count: "exact", head: true })
+    .eq("org_id", orgId)
+    .eq("feature", "recipe_suggest")
+    .in("status", ["ok", "rejected"])
+    .gte("created_at", istMidnightIso())
+  if (error) return fail(500, "Couldn't read today's usage.")
+
+  const used = Math.min(ORG_DAILY_LIMIT, count ?? 0)
+  return ok({ limit: ORG_DAILY_LIMIT, used, remaining_today: ORG_DAILY_LIMIT - used })
+}
+
 export async function POST(req: NextRequest) {
   // 1. Origin + body
   if (!sameOrigin(req)) return fail(403, "Request blocked.")

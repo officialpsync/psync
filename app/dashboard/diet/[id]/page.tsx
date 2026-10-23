@@ -1,4 +1,5 @@
 "use client"
+// app/dashboard/diet/[id]/page.tsx
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
@@ -7,6 +8,7 @@ import { ChevronRight, Check, Info, AlertTriangle, RefreshCw, Pencil, Loader2, X
 import { supabase } from "@/lib/supabase"
 import { BackLink, formatDate, Skeleton } from "../../components/ui"
 import { DesignStyles } from "../../components/DesignSystem"
+import { DietStyles } from "../components/DietTheme"
 
 // ── Types (shape produced by app/api/generate-plan) ─────────────────────────
 interface Macros { calories: number; protein_g: number; carbs_g: number; fat_g: number }
@@ -266,8 +268,8 @@ export default function DietPlanViewPage() {
   // ── Loading / missing ────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="ps-page db">
-        <DesignStyles />
+      <div className="ps-page db dt">
+        <DesignStyles /><DietStyles />
         <Skeleton w={60} h={16} />
         <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 10 }}>
           <Skeleton w={260} h={34} r={8} />
@@ -281,8 +283,8 @@ export default function DietPlanViewPage() {
   }
   if (!plan) {
     return (
-      <div className="ps-page ps-page--narrow db">
-        <DesignStyles />
+      <div className="ps-page db dt">
+        <DesignStyles /><DietStyles />
         <BackLink href="/dashboard/diet" label="Diet plans" />
         <div className="db-card db-pad">
           <div className="db-empty">
@@ -326,8 +328,8 @@ export default function DietPlanViewPage() {
     )
 
     return (
-      <div className="ps-page db">
-        <DesignStyles />
+      <div className="ps-page db dt">
+        <DesignStyles /><DietStyles />
         <BackLink onClick={() => router.back()} label="Back" />
 
         <header className="db-header" style={{ alignItems: "flex-start" }}>
@@ -414,8 +416,8 @@ export default function DietPlanViewPage() {
 
   if (isLegacy) {
     return (
-      <div className="ps-page ps-page--narrow db">
-        <DesignStyles />
+      <div className="ps-page db dt">
+        <DesignStyles /><DietStyles />
         <BackLink onClick={() => router.back()} label="Back" />
         <div className="db-card db-pad">
           <div className="db-empty">
@@ -527,8 +529,8 @@ export default function DietPlanViewPage() {
   }
 
   return (
-    <div className="ps-page db">
-      <DesignStyles />
+    <div className="ps-page db dt">
+      <DesignStyles /><DietStyles />
       <BackLink onClick={() => router.back()} label="Back" />
 
       {/* Header */}

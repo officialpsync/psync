@@ -13,6 +13,7 @@ import { supabase } from "@/lib/supabase"
 import { Avatar, BackLink, Skeleton, useToast } from "../../components/ui"
 import { Sheet } from "../../components/Sheet"
 import { DesignStyles } from "../../components/DesignSystem"
+import { DietStyles } from "../components/DietTheme"
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -301,8 +302,8 @@ export default function DietTemplatesPage() {
   }
 
   return (
-    <div className="ps-page db">
-      <DesignStyles />
+    <div className="ps-page db dt">
+      <DesignStyles /><DietStyles />
       <BackLink href="/dashboard/diet" label="Diet plans" />
 
       <header className="db-header">
