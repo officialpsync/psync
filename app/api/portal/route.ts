@@ -1,0 +1,239 @@
+// app/api/portal/route.ts
+// Member Portal backend API for Psync mobile app and web portal.
+// Uses adminClient to safely fetch member profile, workouts, diet, and attendance
+// without client-side RLS blocking, scoped strictly to the requested member.
+
+import { NextRequest, NextResponse } from "next/server";
+import { adminClient } from "@/lib/server/auth";
+
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
+
+export async function OPTIONS() {
+  return new NextResponse(null, { status: 204, headers: CORS_HEADERS });
+}
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const memberId = searchParams.get("m");
+  const phone = searchParams.get("phone");
+
+  if (!memberId && !phone) {
+    return NextResponse.json(
+      { error: "Provide either member ID (?m=) or phone (?phone=)" },
+      { status: 400, headers: CORS_HEADERS }
+    );
+  }
+
+  try {
+    const db = adminClient();
+
+    // 1. Fetch Member Profile
+    let memberQuery = db.from("members").select("*, branches(name, address, phone)");
+    if (memberId) {
+      memberQuery = memberQuery.eq("id", memberId);
+    } else if (phone) {
+      const cleanPhone = phone.replace(/\D/g, "");
+      memberQuery = memberQuery.or(
+        `phone.eq.${cleanPhone},phone.eq.+91${cleanPhone},phone.ilike.%${cleanPhone}%`
+      );
+    }
+
+    const { data: member, error: memberErr } = await memberQuery.limit(1).maybeSingle();
+    if (memberErr || !member) {
+      return NextResponse.json(
+        { error: "Member not found" },
+        { status: 404, headers: CORS_HEADERS }
+      );
+    }
+
+    const targetId = member.id;
+    const orgId = member.org_id;
+    const todayIso = new Date().toISOString().slice(0, 10);
+
+    // 2. Fetch all related entities in parallel
+    const [
+      { data: membership },
+      { data: attendance },
+      { data: payments },
+      { data: diet },
+      { data: assignedWorkout },
+      { data: classes },
+      { data: bookings },
+    ] = await Promise.all([
+      db
+        .from("memberships")
+        .select("*, membership_plans(name, duration_days, price_paise)")
+        .eq("member_id", targetId)
+        .eq("status", "active")
+        .order("start_date", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from("attendance_logs")
+        .select("*")
+        .eq("member_id", targetId)
+        .order("check_in_at", { ascending: false })
+        .limit(40),
+      db
+        .from("payments")
+        .select("*")
+        .eq("member_id", targetId)
+        .order("paid_at", { ascending: false })
+        .limit(30),
+      db
+        .from("member_diet_plans")
+        .select("*")
+        .eq("member_id", targetId)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from("member_workout_programs")
+        .select("*, workout_programs(*)")
+        .eq("member_id", targetId)
+        .eq("status", "active")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      db
+        .from("classes")
+        .select("*")
+        .eq("org_id", orgId)
+        .eq("is_active", true)
+        .order("start_time"),
+      db
+        .from("class_bookings")
+        .select("*, classes(*)")
+        .eq("member_id", targetId)
+        .eq("status", "booked")
+        .gte("booked_for", todayIso)
+        .order("booked_for", { ascending: true }),
+    ]);
+
+    // 3. Hydrate Workout Program Days and Exercise Items if active
+    let fullWorkout = null;
+    if (assignedWorkout && assignedWorkout.workout_programs) {
+      const progId = assignedWorkout.workout_programs.id;
+      const { data: days } = await db
+        .from("workout_program_days")
+        .select("*")
+        .eq("program_id", progId)
+        .order("day_number");
+
+      const dayIds = (days ?? []).map((d) => d.id);
+      const { data: items } = dayIds.length
+        ? await db
+            .from("workout_program_items")
+            .select("*, exercise:workout_exercises(*)")
+            .in("day_id", dayIds)
+            .order("sort_order")
+        : { data: [] };
+
+      const fullDays = (days ?? []).map((d) => ({
+        ...d,
+        items: (items ?? []).filter((it) => it.day_id === d.id),
+      }));
+
+      fullWorkout = {
+        ...assignedWorkout,
+        workout_programs: {
+          ...assignedWorkout.workout_programs,
+          days: fullDays,
+        },
+      };
+    }
+
+    return NextResponse.json(
+      {
+        member,
+        membership: membership || null,
+        attendance: attendance || [],
+        payments: payments || [],
+        diet: diet || null,
+        workout: fullWorkout,
+        classes: classes || [],
+        bookings: bookings || [],
+      },
+      { headers: CORS_HEADERS }
+    );
+  } catch (err) {
+    console.error("Portal API error:", err);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500, headers: CORS_HEADERS }
+    );
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { action, memberId, orgId, classId, bookingId, bookedFor } = body;
+
+    const db = adminClient();
+
+    if (action === "book_class") {
+      if (!memberId || !orgId || !classId) {
+        return NextResponse.json(
+          { error: "Missing required booking fields" },
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
+
+      const todayIso = bookedFor || new Date().toISOString().slice(0, 10);
+      const { data, error } = await db
+        .from("class_bookings")
+        .insert({
+          org_id: orgId,
+          member_id: memberId,
+          class_id: classId,
+          booked_for: todayIso,
+          status: "booked",
+        })
+        .select()
+        .single();
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400, headers: CORS_HEADERS });
+      }
+
+      return NextResponse.json({ success: true, booking: data }, { headers: CORS_HEADERS });
+    }
+
+    if (action === "cancel_booking") {
+      if (!bookingId) {
+        return NextResponse.json(
+          { error: "Missing bookingId" },
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
+
+      const { error } = await db
+        .from("class_bookings")
+        .update({ status: "cancelled" })
+        .eq("id", bookingId);
+
+      if (error) {
+        return NextResponse.json({ error: error.message }, { status: 400, headers: CORS_HEADERS });
+      }
+
+      return NextResponse.json({ success: true }, { headers: CORS_HEADERS });
+    }
+
+    return NextResponse.json(
+      { error: "Unknown action" },
+      { status: 400, headers: CORS_HEADERS }
+    );
+  } catch (err) {
+    console.error("Portal API POST error:", err);
+    return NextResponse.json(
+      { error: "Internal server error" },
+      { status: 500, headers: CORS_HEADERS }
+    );
+  }
+}
