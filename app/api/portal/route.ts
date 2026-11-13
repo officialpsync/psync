@@ -63,6 +63,7 @@ export async function GET(req: NextRequest) {
       { data: assignedWorkout },
       { data: classes },
       { data: bookings },
+      { data: recipes },
     ] = await Promise.all([
       db
         .from("memberships")
@@ -113,6 +114,13 @@ export async function GET(req: NextRequest) {
         .eq("status", "booked")
         .gte("booked_for", todayIso)
         .order("booked_for", { ascending: true }),
+      db
+        .from("recipes")
+        .select("recipe_id, recipe_name, cuisine, meal_type, diet_type, serving_size_description, calories_kcal, protein_g, carbs_g, fat_g, fiber_g, ingredients, prep_time_minutes, is_high_protein, is_low_gi, method, servings_per_batch, tags")
+        .or(`org_id.is.null,org_id.eq.${orgId}`)
+        .eq("is_active", true)
+        .order("recipe_name")
+        .limit(100),
     ]);
 
     // 3. Hydrate Workout Program Days and Exercise Items if active
@@ -158,6 +166,7 @@ export async function GET(req: NextRequest) {
         workout: fullWorkout,
         classes: classes || [],
         bookings: bookings || [],
+        recipes: recipes || [],
       },
       { headers: CORS_HEADERS }
     );
