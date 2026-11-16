@@ -22,6 +22,7 @@ import type {
   PortalWorkoutProgram,
   PortalDietPlan,
   PortalTab,
+  GymOccupancy,
 } from "../types";
 
 interface HomeTabProps {
@@ -30,6 +31,7 @@ interface HomeTabProps {
   attendance: PortalAttendanceLog[];
   workout: PortalWorkoutProgram | null;
   diet: PortalDietPlan | null;
+  gymOccupancy?: GymOccupancy | null;
   onOpenQR: () => void;
   onSwitchTab: (tab: PortalTab) => void;
 }
@@ -40,6 +42,7 @@ export function HomeTab({
   attendance,
   workout,
   diet,
+  gymOccupancy,
   onOpenQR,
   onSwitchTab,
 }: HomeTabProps) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, Phone, ShieldCheck, Dumbbell, AlertCircle, Loader2 } from "lucide-react";
+import { ArrowRight, Phone, ShieldCheck, Dumbbell, AlertCircle, Loader2, KeyRound } from "lucide-react";
 import { fetchMemberByPhone, fetchMemberById, setCachedMemberId } from "../lib/portalState";
 import type { PortalMember } from "../types";
 import { supabase } from "@/lib/supabase";
@@ -11,6 +11,7 @@ interface PortalGateProps {
 }
 
 export function PortalGate({ onMemberLoaded }: PortalGateProps) {
+  const [loginMethod, setLoginMethod] = useState<"phone" | "member_id">("phone");
   const [inputVal, setInputVal] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,17 +24,26 @@ export function PortalGate({ onMemberLoaded }: PortalGateProps) {
     setLoading(true);
     setError(null);
 
-    // Check if UUID or phone number
-    let member: PortalMember | null = null;
-    if (clean.length > 20 && clean.includes("-")) {
-      member = await fetchMemberById(clean);
-    } else {
-      member = await fetchMemberByPhone(clean);
+    // Extract identifier from link if a URL is pasted
+    let resolvedId = clean;
+    if (clean.includes("/portal") || clean.includes("?m=")) {
+      const match = clean.match(/[?&]m=([a-zA-Z0-9\-]+)/);
+      if (match && match[1]) resolvedId = match[1];
     }
 
-    if (!member) {
-      // Try fetching by ID directly if 36 chars
-      if (clean.length === 36) {
+    let member: PortalMember | null = null;
+
+    if (loginMethod === "member_id") {
+      member = await fetchMemberById(resolvedId);
+      if (!member && resolvedId.replace(/\D/g, "").length >= 10) {
+        member = await fetchMemberByPhone(resolvedId);
+      }
+    } else {
+      // Phone method
+      const digits = clean.replace(/\D/g, "");
+      if (digits.length >= 10) {
+        member = await fetchMemberByPhone(digits.slice(-10));
+      } else {
         member = await fetchMemberById(clean);
       }
     }
@@ -42,7 +52,11 @@ export function PortalGate({ onMemberLoaded }: PortalGateProps) {
       setCachedMemberId(member.id);
       onMemberLoaded(member);
     } else {
-      setError("No member found. Make sure your phone number or Member ID matches what is registered at the gym desk.");
+      if (loginMethod === "member_id") {
+        setError(`No member found with ID "${clean}". Please verify with gym reception or try your phone number.`);
+      } else {
+        setError("No member registered with this mobile number. Make sure it matches what is registered at the gym desk.");
+      }
       setLoading(false);
     }
   }
@@ -100,17 +114,86 @@ export function PortalGate({ onMemberLoaded }: PortalGateProps) {
         </div>
 
         <div className="portal-card" style={{ marginTop: 28, padding: 20 }}>
+          {/* Method Segmented Toggle */}
+          <div
+            style={{
+              display: "flex",
+              background: "var(--surface-2)",
+              padding: 4,
+              borderRadius: 12,
+              marginBottom: 16,
+              border: "1px solid var(--border-mid)",
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => {
+                setLoginMethod("phone");
+                setError(null);
+              }}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                borderRadius: 9,
+                border: "none",
+                background: loginMethod === "phone" ? "var(--accent)" : "transparent",
+                color: loginMethod === "phone" ? "#fff" : "var(--text-secondary)",
+                fontSize: 12.5,
+                fontWeight: 650,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+              }}
+            >
+              <Phone size={14} />
+              <span>Mobile Number</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLoginMethod("member_id");
+                setError(null);
+              }}
+              style={{
+                flex: 1,
+                padding: "8px 12px",
+                borderRadius: 9,
+                border: "none",
+                background: loginMethod === "member_id" ? "var(--accent)" : "transparent",
+                color: loginMethod === "member_id" ? "#fff" : "var(--text-secondary)",
+                fontSize: 12.5,
+                fontWeight: 650,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 6,
+                cursor: "pointer",
+                transition: "all 0.2s ease",
+              }}
+            >
+              <KeyRound size={14} />
+              <span>Member ID</span>
+            </button>
+          </div>
+
           <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               <span style={{ fontSize: 12.5, fontWeight: 650, color: "var(--text-secondary)" }}>
-                Registered Mobile Number or Member ID
+                {loginMethod === "member_id" ? "Gym Member ID or Portal Link" : "Registered Mobile Number"}
               </span>
               <div style={{ position: "relative" }}>
                 <input
                   type="text"
                   value={inputVal}
                   onChange={(e) => setInputVal(e.target.value)}
-                  placeholder="e.g. 9876543210 or paste link"
+                  placeholder={
+                    loginMethod === "member_id"
+                      ? "e.g. 19d80fa5 or paste portal link"
+                      : "e.g. 9876543210"
+                  }
                   autoFocus
                   style={{
                     width: "100%",
@@ -123,10 +206,17 @@ export function PortalGate({ onMemberLoaded }: PortalGateProps) {
                     fontVariantNumeric: "tabular-nums",
                   }}
                 />
-                <Phone
-                  size={17}
-                  style={{ position: "absolute", left: 14, top: 15, color: "var(--text-tertiary)" }}
-                />
+                {loginMethod === "member_id" ? (
+                  <KeyRound
+                    size={17}
+                    style={{ position: "absolute", left: 14, top: 15, color: "var(--text-tertiary)" }}
+                  />
+                ) : (
+                  <Phone
+                    size={17}
+                    style={{ position: "absolute", left: 14, top: 15, color: "var(--text-tertiary)" }}
+                  />
+                )}
               </div>
             </label>
 
@@ -167,7 +257,9 @@ export function PortalGate({ onMemberLoaded }: PortalGateProps) {
                 <Loader2 size={18} className="ps-spin" />
               ) : (
                 <>
-                  <span>Open My Gym Pass</span>
+                  <span>
+                    {loginMethod === "member_id" ? "Sign In with Member ID" : "Open My Gym Pass"}
+                  </span>
                   <ArrowRight size={16} />
                 </>
               )}

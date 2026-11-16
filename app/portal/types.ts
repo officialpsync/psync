@@ -173,3 +173,9 @@ export interface PortalClassBooking {
   created_at: string;
   classes?: PortalClass | null;
 }
+
+export interface GymOccupancy {
+  activeMembersPresent: number;
+  totalCheckInsToday: number;
+  branchName: string;
+}

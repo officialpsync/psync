@@ -20,6 +20,7 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const memberId = searchParams.get("m");
   const phone = searchParams.get("phone");
+  const occupancyOnly = searchParams.get("occupancy_only") === "true";
 
   if (!memberId && !phone) {
     return NextResponse.json(
@@ -31,21 +32,82 @@ export async function GET(req: NextRequest) {
   try {
     const db = adminClient();
 
-    // 1. Fetch Member Profile
-    let memberQuery = db.from("members").select("*, branches(name, address, phone)");
+    // 1. Fetch Member Profile (supports full UUID, short UUID prefix, member_code, phone, or email)
+    let member: any = null;
+
     if (memberId) {
-      memberQuery = memberQuery.eq("id", memberId);
+      const cleanId = memberId.trim();
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(cleanId);
+      
+      if (isUuid) {
+        const { data } = await db
+          .from("members")
+          .select("*, branches(name, address, phone)")
+          .eq("id", cleanId)
+          .maybeSingle();
+        member = data;
+      }
+
+      // If not UUID or not found, try matching by member_code (case-insensitive)
+      if (!member) {
+        const { data } = await db
+          .from("members")
+          .select("*, branches(name, address, phone)")
+          .ilike("member_code", cleanId)
+          .limit(1)
+          .maybeSingle();
+        member = data;
+      }
+
+      // If not found and input is 6+ hex characters (UUID prefix or code)
+      if (!member && cleanId.length >= 6) {
+        const { data: allMembers } = await db
+          .from("members")
+          .select("*, branches(name, address, phone)")
+          .limit(500);
+        const match = (allMembers || []).find((m: any) =>
+          m.id.toLowerCase().startsWith(cleanId.toLowerCase()) ||
+          (m.member_code && m.member_code.toLowerCase() === cleanId.toLowerCase())
+        );
+        if (match) member = match;
+      }
+
+      // Fallback: check if memberId is a phone number or email
+      if (!member) {
+        const cleanDigits = cleanId.replace(/\D/g, "");
+        if (cleanDigits.length >= 10) {
+          const c10 = cleanDigits.slice(-10);
+          const { data } = await db
+            .from("members")
+            .select("*, branches(name, address, phone)")
+            .or(`phone.eq.${c10},phone.eq.+91${c10},phone.ilike.%${c10}%`)
+            .limit(1)
+            .maybeSingle();
+          member = data;
+        } else if (cleanId.includes("@")) {
+          const { data } = await db
+            .from("members")
+            .select("*, branches(name, address, phone)")
+            .ilike("email", cleanId)
+            .limit(1)
+            .maybeSingle();
+          member = data;
+        }
+      }
     } else if (phone) {
-      const cleanPhone = phone.replace(/\D/g, "");
-      memberQuery = memberQuery.or(
-        `phone.eq.${cleanPhone},phone.eq.+91${cleanPhone},phone.ilike.%${cleanPhone}%`
-      );
+      const cleanPhone = phone.replace(/\D/g, "").slice(-10);
+      const { data } = await db
+        .from("members")
+        .select("*, branches(name, address, phone)")
+        .or(`phone.eq.${cleanPhone},phone.eq.+91${cleanPhone},phone.ilike.%${cleanPhone}%`)
+        .limit(1)
+        .maybeSingle();
+      member = data;
     }
 
-    const { data: member, error: memberErr } = await memberQuery.limit(1).maybeSingle();
-    if (memberErr || !member) {
+    if (!member) {
       return NextResponse.json(
-        { error: "Member not found" },
+        { error: "Member not found. Check your Member ID or phone number." },
         { status: 404, headers: CORS_HEADERS }
       );
     }
@@ -156,6 +218,41 @@ export async function GET(req: NextRequest) {
       };
     }
 
+    // 4. Calculate Live Gym Occupancy by attendance
+    let gymOccupancy = {
+      activeMembersPresent: 0,
+      totalCheckInsToday: 0,
+      branchName: member.branches?.name || "Psync Fitness Club",
+    };
+
+    try {
+      const startOfTodayIso = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+      let attQuery = db
+        .from("attendance_logs")
+        .select("id, member_id, check_in_at, check_out_at, branch_id")
+        .eq("org_id", orgId)
+        .gte("check_in_at", startOfTodayIso);
+
+      if (member.branch_id) {
+        attQuery = attQuery.or(`branch_id.eq.${member.branch_id},branch_id.is.null`);
+      }
+
+      const { data: gymLogs } = await attQuery;
+      if (gymLogs && gymLogs.length > 0) {
+        const insideSet = new Set(
+          gymLogs.filter((l) => !l.check_out_at).map((l) => l.member_id)
+        );
+        gymOccupancy.activeMembersPresent = insideSet.size;
+        gymOccupancy.totalCheckInsToday = gymLogs.length;
+      }
+    } catch (e) {
+      console.warn("Failed to calculate gym occupancy:", e);
+    }
+
+    if (occupancyOnly) {
+      return NextResponse.json({ gymOccupancy }, { headers: CORS_HEADERS });
+    }
+
     return NextResponse.json(
       {
         member,
@@ -167,6 +264,7 @@ export async function GET(req: NextRequest) {
         classes: classes || [],
         bookings: bookings || [],
         recipes: recipes || [],
+        gymOccupancy,
       },
       { headers: CORS_HEADERS }
     );

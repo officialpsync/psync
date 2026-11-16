@@ -1,15 +1,16 @@
 "use client";
 
 import { QrCode, LogOut, Smartphone } from "lucide-react";
-import type { PortalMember } from "../types";
+import type { PortalMember, GymOccupancy } from "../types";
 
 interface PortalHeaderProps {
   member: PortalMember;
+  gymOccupancy?: GymOccupancy | null;
   onOpenQR: () => void;
   onLogout: () => void;
 }
 
-export function PortalHeader({ member, onOpenQR, onLogout }: PortalHeaderProps) {
+export function PortalHeader({ member, gymOccupancy, onOpenQR, onLogout }: PortalHeaderProps) {
   const initial = member.full_name.charAt(0).toUpperCase();
 
   return (
@@ -27,6 +28,31 @@ export function PortalHeader({ member, onOpenQR, onLogout }: PortalHeaderProps) 
           <span className="portal-header-name">{member.full_name}</span>
           <span className="portal-header-branch">
             {member.branches?.name || "Psync Gym"}
+            {typeof gymOccupancy?.activeMembersPresent === "number" && (
+              <span
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                  marginLeft: 8,
+                  fontSize: "0.75rem",
+                  color: "#a1f432",
+                  fontWeight: 600,
+                }}
+              >
+                <span
+                  style={{
+                    display: "inline-block",
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    backgroundColor: "#a1f432",
+                    boxShadow: "0 0 6px rgba(161, 244, 50, 0.8)",
+                  }}
+                />
+                {gymOccupancy.activeMembersPresent} inside
+              </span>
+            )}
           </span>
         </div>
       </div>

@@ -36,10 +36,13 @@ export function clearCachedMemberId(): void {
   }
 }
 
-/** Fetch member profile by UUID */
+/** Fetch member profile by UUID, short code, or member_code */
 export async function fetchMemberById(id: string): Promise<PortalMember | null> {
+  const clean = (id || "").trim();
+  if (!clean) return null;
+
   try {
-    const res = await fetch(`/api/portal?m=${encodeURIComponent(id)}`);
+    const res = await fetch(`/api/portal?m=${encodeURIComponent(clean)}`);
     if (res.ok) {
       const data = await res.json();
       if (data.member) return data.member;
@@ -47,14 +50,41 @@ export async function fetchMemberById(id: string): Promise<PortalMember | null> 
   } catch {}
 
   try {
-    const { data, error } = await supabase
-      .from("members")
-      .select("*, branches(name, address, phone)")
-      .eq("id", id)
-      .maybeSingle();
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean);
+    let member: any = null;
 
-    if (error || !data) return null;
-    return data as unknown as PortalMember;
+    if (isUuid) {
+      const { data } = await supabase
+        .from("members")
+        .select("*, branches(name, address, phone)")
+        .eq("id", clean)
+        .maybeSingle();
+      member = data;
+    }
+
+    if (!member) {
+      const { data } = await supabase
+        .from("members")
+        .select("*, branches(name, address, phone)")
+        .ilike("member_code", clean)
+        .limit(1)
+        .maybeSingle();
+      member = data;
+    }
+
+    if (!member && clean.length >= 6) {
+      const { data: all } = await supabase
+        .from("members")
+        .select("*, branches(name, address, phone)")
+        .limit(200);
+      const match = (all || []).find((m: any) =>
+        m.id.toLowerCase().startsWith(clean.toLowerCase()) ||
+        (m.member_code && m.member_code.toLowerCase() === clean.toLowerCase())
+      );
+      if (match) member = match;
+    }
+
+    return (member as unknown as PortalMember) || null;
   } catch {
     return null;
   }

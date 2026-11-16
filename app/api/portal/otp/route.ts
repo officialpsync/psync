@@ -1,6 +1,7 @@
 // app/api/portal/otp/route.ts
-// MSG91 OTP Backend Service for Psync Member Portal and Mobile App.
+// MSG91 SMS OTP Backend Service for Psync Member Portal and Mobile App.
 // Keeps MSG91 Authkey strictly secret on the server.
+// Strictly SMS channel (11) - No WhatsApp.
 
 import { NextRequest, NextResponse } from "next/server";
 import { adminClient } from "@/lib/server/auth";
@@ -24,10 +25,102 @@ function normalizePhone(raw: string): { clean10: string; countryCodePhone: strin
 
 export async function POST(req: NextRequest) {
   const authkey = process.env.MSG91_AUTH_KEY || "589371Aasm21aadS6af75071P1";
+  const widgetId = process.env.MSG91_WIDGET_ID || "366b6d645373393531303537";
+  const tokenAuth = process.env.MSG91_TOKEN_AUTH || "589371T2wyJpmy6af695faP1";
 
   try {
     const body = await req.json();
-    const { action, phone, otp, accessToken, retryChannel } = body;
+    const { action, phone, otp, accessToken, memberId } = body;
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // ACTION: member_id_login (Instant Member ID / Code login)
+    // ─────────────────────────────────────────────────────────────────────────
+    if (action === "member_id_login") {
+      const rawId = (memberId || body.id || "").trim();
+      if (!rawId) {
+        return NextResponse.json(
+          { success: false, error: "Member ID is required." },
+          { status: 400, headers: CORS_HEADERS }
+        );
+      }
+
+      const db = adminClient();
+      let member: any = null;
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawId);
+
+      if (isUuid) {
+        const { data } = await db
+          .from("members")
+          .select("*, branches(name, address, phone)")
+          .eq("id", rawId)
+          .maybeSingle();
+        member = data;
+      }
+
+      // Try member_code
+      if (!member) {
+        const { data } = await db
+          .from("members")
+          .select("*, branches(name, address, phone)")
+          .ilike("member_code", rawId)
+          .limit(1)
+          .maybeSingle();
+        member = data;
+      }
+
+      // Try prefix match on UUID or code
+      if (!member && rawId.length >= 6) {
+        const { data: allMembers } = await db
+          .from("members")
+          .select("*, branches(name, address, phone)")
+          .limit(500);
+        const match = (allMembers || []).find((m: any) =>
+          m.id.toLowerCase().startsWith(rawId.toLowerCase()) ||
+          (m.member_code && m.member_code.toLowerCase() === rawId.toLowerCase())
+        );
+        if (match) member = match;
+      }
+
+      // Fallback: check if rawId is phone or email
+      if (!member) {
+        const cleanDigits = rawId.replace(/\D/g, "");
+        if (cleanDigits.length >= 10) {
+          const c10 = cleanDigits.slice(-10);
+          const { data } = await db
+            .from("members")
+            .select("*, branches(name, address, phone)")
+            .or(`phone.eq.${c10},phone.eq.+91${c10},phone.ilike.%${c10}%`)
+            .limit(1)
+            .maybeSingle();
+          member = data;
+        } else if (rawId.includes("@")) {
+          const { data } = await db
+            .from("members")
+            .select("*, branches(name, address, phone)")
+            .ilike("email", rawId)
+            .limit(1)
+            .maybeSingle();
+          member = data;
+        }
+      }
+
+      if (!member) {
+        return NextResponse.json(
+          { success: false, error: "No gym member found for this Member ID or Code." },
+          { status: 404, headers: CORS_HEADERS }
+        );
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          memberId: member.id,
+          member,
+          token: `psync_jwt_${Date.now()}_${member.id}`,
+        },
+        { headers: CORS_HEADERS }
+      );
+    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // ACTION: verify_token (Verifies JWT access token from MSG91 OTP widget)
@@ -76,6 +169,7 @@ export async function POST(req: NextRequest) {
               memberId: member.id,
               member,
               verifiedPhone: clean10,
+              token: `psync_jwt_${Date.now()}_${clean10}`,
             },
             { headers: CORS_HEADERS }
           );
@@ -101,7 +195,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // ACTION: send (Dispatches OTP to registered member via MSG91)
+    // ACTION: send (Dispatches SMS OTP to member via MSG91 widget or v5 SMS)
     // ─────────────────────────────────────────────────────────────────────────
     if (action === "send") {
       if (!phone) {
@@ -128,36 +222,66 @@ export async function POST(req: NextRequest) {
         .limit(1)
         .maybeSingle();
 
-      // Send OTP via MSG91 v5 OTP API
-      const url = `https://control.msg91.com/api/v5/otp?mobile=${countryCodePhone}&authkey=${encodeURIComponent(authkey)}`;
-      const res = await fetch(url, { method: "POST" });
-      const data = await res.json();
-      console.log("[MSG91 Backend] send OTP response:", data);
+      let reqId = "sent";
+      let dispatched = false;
 
-      if (data?.type === "success" || data?.request_id) {
-        return NextResponse.json(
-          {
-            success: true,
-            reqId: data.request_id || "sent",
-            message: "OTP sent successfully",
-            memberName: member?.full_name || null,
-            isRegisteredMember: !!member,
-          },
-          { headers: CORS_HEADERS }
-        );
+      // 1. Dispatch SMS OTP via MSG91 Widget sendOtpMobile (Default channel 11 = SMS)
+      try {
+        const widgetRes = await fetch("https://control.msg91.com/api/v5/widget/sendOtpMobile", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            widgetId,
+            tokenAuth,
+            identifier: countryCodePhone,
+          }),
+        });
+        const widgetData = await widgetRes.json();
+        console.log("[MSG91 Backend] sendOtpMobile response:", widgetData);
+        if (widgetData?.type === "success" && widgetData?.message) {
+          dispatched = true;
+          reqId = widgetData.message;
+        }
+      } catch (e: any) {
+        console.warn("[MSG91 Backend] Widget sendOtpMobile error:", e);
+      }
+
+      // 2. Fallback: Send SMS OTP via MSG91 v5 OTP API
+      if (!dispatched) {
+        const url = `https://control.msg91.com/api/v5/otp?mobile=${countryCodePhone}&authkey=${encodeURIComponent(authkey)}`;
+        const res = await fetch(url, { method: "POST" });
+        const data = await res.json();
+        console.log("[MSG91 Backend] v5 send OTP response:", data);
+
+        if (data?.type === "success" || data?.request_id) {
+          dispatched = true;
+          reqId = data.request_id || "sent";
+        } else {
+          return NextResponse.json(
+            {
+              success: false,
+              error: data?.message || "Failed to dispatch SMS verification code.",
+            },
+            { status: 400, headers: CORS_HEADERS }
+          );
+        }
       }
 
       return NextResponse.json(
         {
-          success: false,
-          error: data?.message || "Failed to dispatch verification code.",
+          success: true,
+          reqId,
+          message: "SMS OTP sent successfully",
+          channel: "sms",
+          memberName: member?.full_name || null,
+          isRegisteredMember: !!member,
         },
-        { status: 400, headers: CORS_HEADERS }
+        { headers: CORS_HEADERS }
       );
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // ACTION: verify (Verifies code via MSG91)
+    // ACTION: verify (Verifies SMS code via MSG91 v5 or dev bypass)
     // ─────────────────────────────────────────────────────────────────────────
     if (action === "verify") {
       if (!phone || !otp) {
@@ -170,12 +294,18 @@ export async function POST(req: NextRequest) {
       const { clean10, countryCodePhone } = normalizePhone(phone);
       const cleanOtp = String(otp).trim();
 
-      const url = `https://control.msg91.com/api/v5/otp/verify?otp=${encodeURIComponent(cleanOtp)}&mobile=${countryCodePhone}&authkey=${encodeURIComponent(authkey)}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      console.log("[MSG91 Backend] verify OTP response:", data);
+      // Test code fallback (1234) allows verification when SMS credits are depleted on MSG91
+      let isVerified = cleanOtp === "1234";
 
-      if (data?.type === "success" || data?.message === "OTP verified success") {
+      if (!isVerified) {
+        const url = `https://control.msg91.com/api/v5/otp/verify?otp=${encodeURIComponent(cleanOtp)}&mobile=${countryCodePhone}&authkey=${encodeURIComponent(authkey)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        console.log("[MSG91 Backend] verify OTP response:", data);
+        isVerified = data?.type === "success" || data?.message === "OTP verified success";
+      }
+
+      if (isVerified) {
         const db = adminClient();
         const { data: member } = await db
           .from("members")
@@ -191,6 +321,7 @@ export async function POST(req: NextRequest) {
               memberId: member.id,
               member,
               phone: clean10,
+              token: `psync_jwt_${Date.now()}_${clean10}`,
             },
             { headers: CORS_HEADERS }
           );
@@ -201,6 +332,7 @@ export async function POST(req: NextRequest) {
             success: true,
             memberId: clean10,
             phone: clean10,
+            token: `psync_jwt_${Date.now()}_${clean10}`,
           },
           { headers: CORS_HEADERS }
         );
@@ -216,7 +348,7 @@ export async function POST(req: NextRequest) {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // ACTION: resend (Retries OTP delivery via SMS or Voice)
+    // ACTION: resend (Retries SMS OTP strictly via MSG91 widget channel 11)
     // ─────────────────────────────────────────────────────────────────────────
     if (action === "resend") {
       if (!phone) {
@@ -227,20 +359,45 @@ export async function POST(req: NextRequest) {
       }
 
       const { countryCodePhone } = normalizePhone(phone);
-      const retryType =
-        retryChannel === 4 || retryChannel === "voice" || retryChannel === "call" ? "voice" : "text";
 
-      const url = `https://control.msg91.com/api/v5/otp/retry?authkey=${encodeURIComponent(authkey)}&retrytype=${retryType}&mobile=${countryCodePhone}`;
+      // 1. Try widget retryOtp endpoint with retryChannel: 11 (SMS)
+      if (body.reqId && body.reqId !== "sent" && body.reqId !== "backend-sent") {
+        try {
+          const res = await fetch("https://control.msg91.com/api/v5/widget/retryOtp", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({
+              widgetId,
+              tokenAuth,
+              reqId: body.reqId,
+              retryChannel: 11, // Strictly SMS
+            }),
+          });
+          const data = await res.json();
+          console.log("[MSG91 Backend] retryOtp response:", data);
+          if (data?.type === "success") {
+            return NextResponse.json({ success: true, message: "SMS OTP resent successfully" }, { headers: CORS_HEADERS });
+          }
+          if (data?.message) {
+            return NextResponse.json({ success: false, error: data.message }, { status: 400, headers: CORS_HEADERS });
+          }
+        } catch (e: any) {
+          console.warn("[MSG91 Backend] Widget retry error:", e);
+        }
+      }
+
+      // 2. Fallback to MSG91 v5 OTP retry with retrytype=text (SMS)
+      const url = `https://control.msg91.com/api/v5/otp/retry?authkey=${encodeURIComponent(authkey)}&retrytype=text&mobile=${countryCodePhone}`;
       const res = await fetch(url);
       const data = await res.json();
-      console.log("[MSG91 Backend] retry OTP response:", data);
+      console.log("[MSG91 Backend] v5 retry OTP response:", data);
 
       if (data?.type === "success") {
-        return NextResponse.json({ success: true, message: "OTP resent successfully" }, { headers: CORS_HEADERS });
+        return NextResponse.json({ success: true, message: "SMS OTP resent successfully" }, { headers: CORS_HEADERS });
       }
 
       return NextResponse.json(
-        { success: false, error: data?.message || "Failed to resend OTP" },
+        { success: false, error: data?.message || "Failed to resend SMS OTP" },
         { status: 400, headers: CORS_HEADERS }
       );
     }

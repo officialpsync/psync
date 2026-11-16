@@ -18,6 +18,7 @@ import type {
   PortalWorkoutProgram,
   PortalDietPlan,
   PortalTab,
+  GymOccupancy,
 } from "./types";
 import { supabase } from "@/lib/supabase";
 import { PortalHeader } from "./components/PortalHeader";
@@ -55,6 +56,7 @@ function PortalApp() {
   const [payments, setPayments] = useState<PortalPayment[]>([]);
   const [workout, setWorkout] = useState<PortalWorkoutProgram | null>(null);
   const [diet, setDiet] = useState<PortalDietPlan | null>(null);
+  const [gymOccupancy, setGymOccupancy] = useState<GymOccupancy | null>(null);
 
   const [activeTab, setActiveTab] = useState<PortalTab>("pass");
   const [loading, setLoading] = useState(true);
@@ -70,6 +72,7 @@ function PortalApp() {
         setPayments(bundle.payments || []);
         setDiet(bundle.diet || null);
         setWorkout(bundle.workout || null);
+        if (bundle.gymOccupancy) setGymOccupancy(bundle.gymOccupancy);
         return;
       }
 
@@ -232,6 +235,7 @@ function PortalApp() {
         {/* Top Header */}
         <PortalHeader
           member={member}
+          gymOccupancy={gymOccupancy}
           onOpenQR={() => setQrModalOpen(true)}
           onLogout={handleLogout}
         />
@@ -245,6 +249,7 @@ function PortalApp() {
               attendance={attendance}
               workout={workout}
               diet={diet}
+              gymOccupancy={gymOccupancy}
               onOpenQR={() => setQrModalOpen(true)}
               onSwitchTab={setActiveTab}
             />

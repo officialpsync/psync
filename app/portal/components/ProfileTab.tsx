@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   User,
   Phone,
@@ -13,6 +14,9 @@ import {
   Activity,
   Heart,
   Scale,
+  ShieldCheck,
+  Copy,
+  Check,
 } from "lucide-react";
 import type {
   PortalMember,
@@ -36,6 +40,18 @@ export function ProfileTab({
   payments,
   onLogout,
 }: ProfileTabProps) {
+  const [copiedId, setCopiedId] = useState(false);
+
+  const shortId = member.id ? member.id.slice(0, 8).toUpperCase() : "";
+
+  function handleCopyId() {
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(member.id);
+      setCopiedId(true);
+      setTimeout(() => setCopiedId(false), 2000);
+    }
+  }
+
   // BMI calculation
   const bmi =
     member.height_cm && member.weight_kg
@@ -115,6 +131,77 @@ export function ProfileTab({
           </div>
           <div className="portal-stat-sub">Registered profile height</div>
         </div>
+      </div>
+
+      {/* ── MEMBER IDENTIFIER BADGE ── */}
+      <div
+        className="portal-card"
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          padding: "14px 16px",
+          background: "linear-gradient(135deg, rgba(0, 113, 227, 0.08), rgba(52, 199, 89, 0.04))",
+          borderColor: "rgba(0, 113, 227, 0.25)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              backgroundColor: "rgba(0, 113, 227, 0.15)",
+              color: "var(--accent)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <ShieldCheck size={20} />
+          </div>
+          <div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "var(--text-secondary)", letterSpacing: "0.05em" }}>
+              GYM MEMBER ID
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 750, color: "var(--text-primary)", fontFamily: "monospace" }}>
+              {shortId}
+              <span style={{ fontSize: 11, color: "var(--text-tertiary)", marginLeft: 6, fontWeight: 400 }}>
+                ({member.id.slice(0, 18)}...)
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleCopyId}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            padding: "6px 12px",
+            borderRadius: 8,
+            border: "1px solid var(--border-mid)",
+            background: "var(--surface-2)",
+            color: copiedId ? "var(--green)" : "var(--text-secondary)",
+            fontSize: 12,
+            fontWeight: 650,
+            cursor: "pointer",
+          }}
+        >
+          {copiedId ? (
+            <>
+              <Check size={13} />
+              <span>Copied</span>
+            </>
+          ) : (
+            <>
+              <Copy size={13} />
+              <span>Copy ID</span>
+            </>
+          )}
+        </button>
       </div>
 
       {/* ── CONTACT DETAILS ── */}
