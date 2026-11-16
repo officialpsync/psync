@@ -296,6 +296,7 @@ export async function POST(req: NextRequest) {
 
       // Test code fallback (1234) allows verification when SMS credits are depleted on MSG91
       let isVerified = cleanOtp === "1234";
+      let verifyErr = "Invalid verification code. Please check and retry.";
 
       if (!isVerified) {
         const url = `https://control.msg91.com/api/v5/otp/verify?otp=${encodeURIComponent(cleanOtp)}&mobile=${countryCodePhone}&authkey=${encodeURIComponent(authkey)}`;
@@ -303,6 +304,9 @@ export async function POST(req: NextRequest) {
         const data = await res.json();
         console.log("[MSG91 Backend] verify OTP response:", data);
         isVerified = data?.type === "success" || data?.message === "OTP verified success";
+        if (data?.message && !isVerified) {
+          verifyErr = data.message;
+        }
       }
 
       if (isVerified) {
@@ -341,7 +345,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: data?.message || "Invalid verification code. Please check and retry.",
+          error: verifyErr,
         },
         { status: 401, headers: CORS_HEADERS }
       );
@@ -363,7 +367,6 @@ export async function POST(req: NextRequest) {
       // 1. Try widget retryOtp endpoint with retryChannel: 11 (SMS)
       if (body.reqId && body.reqId !== "sent" && body.reqId !== "backend-sent") {
         try {
-          const targetChannel = Number(body.retryChannel) || 11;
           const res = await fetch("https://control.msg91.com/api/v5/widget/retryOtp", {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -371,14 +374,13 @@ export async function POST(req: NextRequest) {
               widgetId,
               tokenAuth,
               reqId: body.reqId,
-              retryChannel: targetChannel,
+              retryChannel: 11, // Strictly SMS
             }),
           });
           const data = await res.json();
           console.log("[MSG91 Backend] retryOtp response:", data);
           if (data?.type === "success") {
-            const channelName = targetChannel === 12 ? "WhatsApp" : targetChannel === 4 ? "Voice" : "SMS";
-            return NextResponse.json({ success: true, message: `OTP resent successfully via ${channelName}` }, { headers: CORS_HEADERS });
+            return NextResponse.json({ success: true, message: "Verification code resent via SMS" }, { headers: CORS_HEADERS });
           }
           if (data?.message) {
             return NextResponse.json({ success: false, error: data.message }, { status: 400, headers: CORS_HEADERS });
