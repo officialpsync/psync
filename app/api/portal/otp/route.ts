@@ -25,7 +25,7 @@ function normalizePhone(raw: string): { clean10: string; countryCodePhone: strin
 
 export async function POST(req: NextRequest) {
   const authkey = process.env.MSG91_AUTH_KEY || "589371Aasm21aadS6af75071P1";
-  const widgetId = process.env.MSG91_WIDGET_ID || "366b706c3150343231313639";
+  const widgetId = process.env.MSG91_WIDGET_ID || "366b6d645373393531303537";
   const tokenAuth = process.env.MSG91_TOKEN_AUTH || "589371T2wyJpmy6af695faP1";
 
   try {
@@ -363,8 +363,10 @@ export async function POST(req: NextRequest) {
       }
 
       const { countryCodePhone } = normalizePhone(phone);
+      const targetChannel = Number(body.retryChannel || body.channel) || 12; // 12: WhatsApp, 11: SMS, 4: Voice
+      const channelLabel = targetChannel === 12 ? "WhatsApp" : targetChannel === 4 ? "Voice" : "SMS";
 
-      // 1. Try widget retryOtp endpoint with retryChannel: 11 (SMS)
+      // 1. Try widget retryOtp endpoint with target channel
       if (body.reqId && body.reqId !== "sent" && body.reqId !== "backend-sent") {
         try {
           const res = await fetch("https://control.msg91.com/api/v5/widget/retryOtp", {
@@ -374,13 +376,13 @@ export async function POST(req: NextRequest) {
               widgetId,
               tokenAuth,
               reqId: body.reqId,
-              retryChannel: 11, // Strictly SMS
+              retryChannel: targetChannel,
             }),
           });
           const data = await res.json();
           console.log("[MSG91 Backend] retryOtp response:", data);
           if (data?.type === "success") {
-            return NextResponse.json({ success: true, message: "Verification code resent via SMS" }, { headers: CORS_HEADERS });
+            return NextResponse.json({ success: true, message: `Verification code resent via ${channelLabel}` }, { headers: CORS_HEADERS });
           }
           if (data?.message) {
             return NextResponse.json({ success: false, error: data.message }, { status: 400, headers: CORS_HEADERS });
@@ -390,18 +392,19 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 2. Fallback to MSG91 v5 OTP retry with retrytype=text (SMS)
-      const url = `https://control.msg91.com/api/v5/otp/retry?authkey=${encodeURIComponent(authkey)}&retrytype=text&mobile=${countryCodePhone}`;
+      // 2. Fallback to MSG91 v5 OTP retry
+      const retryTypeParam = targetChannel === 4 ? "voice" : "text";
+      const url = `https://control.msg91.com/api/v5/otp/retry?authkey=${encodeURIComponent(authkey)}&retrytype=${retryTypeParam}&mobile=${countryCodePhone}`;
       const res = await fetch(url);
       const data = await res.json();
       console.log("[MSG91 Backend] v5 retry OTP response:", data);
 
       if (data?.type === "success") {
-        return NextResponse.json({ success: true, message: "SMS OTP resent successfully" }, { headers: CORS_HEADERS });
+        return NextResponse.json({ success: true, message: `OTP resent successfully via ${channelLabel}` }, { headers: CORS_HEADERS });
       }
 
       return NextResponse.json(
-        { success: false, error: data?.message || "Failed to resend SMS OTP" },
+        { success: false, error: data?.message || `Failed to resend OTP via ${channelLabel}` },
         { status: 400, headers: CORS_HEADERS }
       );
     }
