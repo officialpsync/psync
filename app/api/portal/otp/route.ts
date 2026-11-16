@@ -25,7 +25,7 @@ function normalizePhone(raw: string): { clean10: string; countryCodePhone: strin
 
 export async function POST(req: NextRequest) {
   const authkey = process.env.MSG91_AUTH_KEY || "589371Aasm21aadS6af75071P1";
-  const widgetId = process.env.MSG91_WIDGET_ID || "366b6d645373393531303537";
+  const widgetId = process.env.MSG91_WIDGET_ID || "366b706c3150343231313639";
   const tokenAuth = process.env.MSG91_TOKEN_AUTH || "589371T2wyJpmy6af695faP1";
 
   try {
