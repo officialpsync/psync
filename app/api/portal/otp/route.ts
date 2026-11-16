@@ -363,6 +363,7 @@ export async function POST(req: NextRequest) {
       // 1. Try widget retryOtp endpoint with retryChannel: 11 (SMS)
       if (body.reqId && body.reqId !== "sent" && body.reqId !== "backend-sent") {
         try {
+          const targetChannel = Number(body.retryChannel) || 11;
           const res = await fetch("https://control.msg91.com/api/v5/widget/retryOtp", {
             method: "POST",
             headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -370,13 +371,14 @@ export async function POST(req: NextRequest) {
               widgetId,
               tokenAuth,
               reqId: body.reqId,
-              retryChannel: 11, // Strictly SMS
+              retryChannel: targetChannel,
             }),
           });
           const data = await res.json();
           console.log("[MSG91 Backend] retryOtp response:", data);
           if (data?.type === "success") {
-            return NextResponse.json({ success: true, message: "SMS OTP resent successfully" }, { headers: CORS_HEADERS });
+            const channelName = targetChannel === 12 ? "WhatsApp" : targetChannel === 4 ? "Voice" : "SMS";
+            return NextResponse.json({ success: true, message: `OTP resent successfully via ${channelName}` }, { headers: CORS_HEADERS });
           }
           if (data?.message) {
             return NextResponse.json({ success: false, error: data.message }, { status: 400, headers: CORS_HEADERS });
