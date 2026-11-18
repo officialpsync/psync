@@ -232,10 +232,10 @@ function PortalApp() {
   return (
     <div className="portal-root">
       <div className="portal-container">
-        {/* Top Header */}
+        {/* Top Header: only show gym occupancy in header on home ("pass") tab */}
         <PortalHeader
           member={member}
-          gymOccupancy={gymOccupancy}
+          gymOccupancy={activeTab === "pass" ? gymOccupancy : null}
           onOpenQR={() => setQrModalOpen(true)}
           onLogout={handleLogout}
         />
