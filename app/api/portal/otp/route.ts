@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { adminClient } from "@/lib/server/auth";
+import { burst } from "@/lib/server/rateLimit";
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -208,6 +209,34 @@ export async function POST(req: NextRequest) {
         },
         { status: 401, headers: CORS_HEADERS }
       );
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Rate Limiting: 5 OTP sends per 10 minutes per phone/IP
+    // ─────────────────────────────────────────────────────────────────────────
+    if (action === "send" || action === "resend") {
+      const clientIp =
+        req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+        req.headers.get("x-real-ip") ||
+        "unknown_ip";
+      const { clean10 } = normalizePhone(phone);
+      const rateLimitKey = clean10.length === 10 ? `phone_${clean10}` : `ip_${clientIp}`;
+
+      try {
+        const rl = await burst("otp_send", rateLimitKey, 5, "10 m");
+        if (!rl.ok && !rl.unavailable) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: `Too many OTP requests. Please wait ${rl.retryAfter}s before requesting another verification code.`,
+              retryAfter: rl.retryAfter,
+            },
+            { status: 429, headers: CORS_HEADERS }
+          );
+        }
+      } catch (rlErr) {
+        console.warn("[MSG91 Backend] Rate limit check warning:", rlErr);
+      }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
