@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
-import { BookOpen, Calendar, Camera, ChevronRight, Copy, Dumbbell, Loader2, LogIn, LogOut, Pencil, Plus, RefreshCw, Salad, Search, Wallet, UserCheck, X } from "lucide-react";
+import { BookOpen, Calendar, Camera, ChevronRight, Copy, Dumbbell, Loader2, LogIn, LogOut, Pencil, Plus, QrCode, RefreshCw, Salad, Search, Wallet, UserCheck, X } from "lucide-react";
 import {
   Avatar, BackLink, cols, formatDate, formatINR, formatTime, Segmented, Skeleton, useToast,
 } from "../../components/ui";
@@ -938,6 +938,25 @@ export default function MemberProfilePage() {
 
   const menu = [
     { label: active ? "Renew membership" : "Add membership", icon: RefreshCw, run: () => setRenewSheetOpen(true) },
+    { label: "WhatsApp Member Pass Link", icon: MessageCircle, run: () => {
+      const portalUrl = typeof window !== "undefined" ? `${window.location.origin}/portal?m=${member.id}` : `/portal?m=${member.id}`;
+      const msg = `Hi ${first}, here is your personal Psync gym pass, workout routine & diet plan: ${portalUrl}`;
+      if (member.phone) {
+        window.open(`https://wa.me/${member.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`, "_blank");
+      } else {
+        navigator.clipboard.writeText(portalUrl);
+        show("Member pass link copied to clipboard");
+      }
+    }},
+    { label: "Copy Member Portal Link", icon: Copy, run: () => {
+      const portalUrl = typeof window !== "undefined" ? `${window.location.origin}/portal?m=${member.id}` : `/portal?m=${member.id}`;
+      navigator.clipboard.writeText(portalUrl);
+      show("Member portal link copied to clipboard");
+    }},
+    { label: "Preview Member Pass", icon: QrCode, run: () => {
+      const portalUrl = typeof window !== "undefined" ? `${window.location.origin}/portal?m=${member.id}` : `/portal?m=${member.id}`;
+      window.open(portalUrl, "_blank");
+    }},
     { label: activeProgram ? "Change workout" : "Assign workout", icon: Dumbbell, run: () => setAssignSheetOpen(true) },
     { label: "Book a class", icon: BookOpen, run: () => setBookClassSheetOpen(true) },
     ...(activeDiet ? [{ label: "Copy diet plan", icon: Copy, run: () => openCopy("diet", activeDiet.id) }] : []),
