@@ -1142,4 +1142,13 @@ const CL_CSS = `
   .cl-ag-chev { grid-column: 3; grid-row: 1 / span 2; }
   .cl-fab { position: fixed; right: 16px; bottom: calc(var(--tabbar-h, 0px) + env(safe-area-inset-bottom, 0px) + 16px); z-index: 40; width: 54px; height: 54px; border-radius: 50%; border: none; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #0a84ff, #5e5ce6); box-shadow: 0 12px 24px -8px rgba(10,132,255,0.7); cursor: pointer; }
 }
+@media (max-width: 360px) {
+  .cl-days { gap: 1px; padding: 4px 2px; }
+  .cl-day b { width: 26px; height: 26px; font-size: 13px; }
+  .cl-day small { font-size: 10px; }
+  .cl-title h1 { font-size: 20px; }
+}
+@media (min-width: 1920px) {
+  .ps-page.cl { max-width: 1720px !important; margin: 0 auto !important; }
+}
 `;

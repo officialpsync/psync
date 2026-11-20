@@ -732,6 +732,9 @@ function BrandPreview({ brand }: { brand: Brand }) {
 // NOTE: no backticks inside this CSS.
 const ST_CSS = `
 .ps-page.st { max-width: none !important; margin: 0 !important; padding: 18px 18px 96px !important; }
+@media (min-width: 1920px) {
+  .ps-page.st { max-width: 1600px !important; margin: 0 auto !important; }
+}
 .db.st { max-width: none; }
 .st { --st-line: var(--separator); }
 .st-head { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
@@ -831,7 +834,7 @@ const ST_CSS = `
 .st-team-link span { flex: 1; display: flex; flex-direction: column; }
 .st-team-link small { opacity: 0.85; font-size: 12.5px; }
 
-.st-savebar { position: fixed; left: var(--sb-w, 72px); right: 0; bottom: 0; z-index: 40; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 12px 18px; background: rgba(255,255,255,0.94); border-top: 1px solid var(--st-line); backdrop-filter: blur(16px); }
+.st-savebar { position: fixed; left: var(--sb-w, 72px); right: 0; bottom: 0; z-index: 50; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 12px 18px; background: rgba(255,255,255,0.94); border-top: 1px solid var(--st-line); backdrop-filter: blur(16px); }
 .st-savebar span { margin-right: auto; font-size: 13px; font-weight: 600; color: #b45309; }
 .st-savebar .ps-btn { height: 42px; border-radius: 12px; }
 
@@ -850,5 +853,17 @@ const ST_CSS = `
   .st-savebar span { display: none; }
   .st-savebar .ps-btn { flex: 1; justify-content: center; }
   .st .ps-input, .st-hex input { font-size: 16px; }
+}
+@media (max-width: 440px) {
+  .st-team-stats { grid-template-columns: 1fr; }
+  .st-branch { flex-wrap: wrap; }
+  .st-branch-acts { width: 100%; justify-content: flex-end; }
+}
+@media (max-width: 360px) {
+  .ps-page.st { padding: 8px 8px 140px !important; }
+  .st-title h1 { font-size: 20px; }
+  .st-title-icon { width: 38px; height: 38px; border-radius: 11px; }
+  .st-logo { flex-direction: column; align-items: flex-start; }
+  .st-swatches { gap: 6px; }
 }
 `;

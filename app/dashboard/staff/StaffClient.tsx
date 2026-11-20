@@ -487,6 +487,9 @@ export default function StaffClient() {
 // NOTE: no backticks inside this CSS.
 const SF_CSS = `
 .ps-page.sf { max-width: none !important; margin: 0 !important; padding: 18px !important; }
+@media (min-width: 1920px) {
+  .ps-page.sf { max-width: 1680px !important; margin: 0 auto !important; }
+}
 .db.sf { max-width: none; }
 .sf { --sf-line: var(--separator); }
 .sf-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px 14px; margin-bottom: 14px; }
@@ -568,5 +571,11 @@ const SF_CSS = `
   .sf-tr > :nth-child(2), .sf-tr > :nth-child(3), .sf-tr > :nth-child(4) { display: none; }
   .sf-tr > :nth-child(5) { display: none; }
   .sf-chev { display: none; }
+}
+@media (max-width: 360px) {
+  .ps-page.sf { padding: 8px 8px 20px !important; }
+  .sf-title h1 { font-size: 20px; }
+  .sf-title-icon { width: 38px; height: 38px; border-radius: 11px; }
+  .sf-kpi { height: 44px; padding: 0 8px 0 6px; }
 }
 `

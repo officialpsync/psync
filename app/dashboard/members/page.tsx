@@ -647,6 +647,9 @@ const CSS = `
 }
 /* Same gutter as Leads, regardless of any page width cap elsewhere. */
 .ps-page.mb { max-width: none !important; margin: 0 !important; padding: 18px !important; }
+@media (min-width: 1920px) {
+  .ps-page.mb { max-width: 1680px !important; margin: 0 auto !important; }
+}
 .mb-head-title { display: flex; align-items: center; gap: 12px; }
 .mb-head-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #0a84ff, #5e5ce6); box-shadow: 0 6px 16px rgba(10,132,255,0.28); flex-shrink: 0; }
 .mb-card { position: relative; overflow: visible; }
@@ -681,9 +684,15 @@ const CSS = `
   .mb-show-sm { display: block !important; }
   .mb-text small.mb-show-sm { white-space: normal; }
   .mb-actions .mb-chev { display: none; }
-  .mb-pop { top: auto !important; bottom: 0; left: 0 !important; right: 0; max-width: none; width: auto; border-radius: 18px 18px 0 0; max-height: 82vh; position: fixed; }
-  .mb-menu { position: fixed; left: 10px; right: 10px; top: auto; bottom: 10px; width: auto !important; }
+  .mb-pop { top: auto !important; bottom: calc(var(--tabbar-h, 56px) + var(--safe-bottom, 0px)); left: 0 !important; right: 0; max-width: none; width: auto; border-radius: 18px 18px 0 0; max-height: calc(85vh - var(--tabbar-h, 56px)); position: fixed; z-index: 60; }
+  .mb-menu { position: fixed; left: 10px; right: 10px; top: auto; bottom: calc(var(--tabbar-h, 56px) + var(--safe-bottom, 0px) + 8px); width: auto !important; z-index: 60; }
   .mb-search input { font-size: 16px; }
+}
+@media (max-width: 380px) {
+  .mb-tr { grid-template-columns: minmax(0, 1fr) auto; }
+  .mb-tr > :nth-child(2) .mb-progs { display: none; }
+  .mb-tabs button { padding: 0 8px; font-size: 12.5px; }
+  .mb-tool { padding: 0 8px; font-size: 12px; }
 }
 /* Card fills the screen like Leads: footer sits at the bottom, rows scroll inside when there are many. */
 @media (min-width: 900px) {

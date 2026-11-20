@@ -475,4 +475,10 @@ const XL_CSS = `
   .xl-name { font-size: 13.5px; }
   .db-catpick { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 }
+@media (max-width: 440px) {
+  .xl-grid, .xl-grid[data-dense="true"] { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+}
+@media (max-width: 340px) {
+  .xl-grid, .xl-grid[data-dense="true"] { grid-template-columns: minmax(0, 1fr); }
+}
 `

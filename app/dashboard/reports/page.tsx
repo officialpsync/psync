@@ -1052,6 +1052,9 @@ export default function ReportsPage() {
 // NOTE: no backticks inside this CSS.
 const RP_CSS = `
 .ps-page.rp { max-width: none !important; margin: 0 !important; padding: 18px !important; }
+@media (min-width: 1920px) {
+  .ps-page.rp { max-width: 1720px !important; margin: 0 auto !important; }
+}
 .db.rp { max-width: none; }
 .rp { --rp-line: var(--separator); }
 
@@ -1260,5 +1263,19 @@ a.rp-li:hover { background: #f4f7fc; }
   .rp-grid > .rp-tile { grid-column: span 12; }
   .rp-sizes { display: none; }
   .rp-select, .rp-dates input { font-size: 16px; }
+}
+@media (max-width: 480px) {
+  .rp-donut { flex-direction: column; align-items: center; gap: 10px; }
+  .rp-donut-chart { margin: 0 auto; }
+  .rp-legend { width: 100%; }
+}
+@media (max-width: 360px) {
+  .ps-page.rp { padding: 8px 8px 20px !important; }
+  .rp-title h1 { font-size: 20px; }
+  .rp-title-icon { width: 38px; height: 38px; }
+  .rp-card { padding: 10px 10px 12px; }
+  .rp-kpi { flex: 0 0 135px; }
+  .rp-heat { font-size: 10px; gap: 2px; }
+  .rp-heat-row button { min-height: 20px; font-size: 10px; }
 }
 `;

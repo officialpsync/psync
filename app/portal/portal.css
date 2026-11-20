@@ -606,3 +606,63 @@
   font-size: 13px;
   animation: portalFadeIn 150ms ease;
 }
+
+@media (pointer: coarse) {
+  .portal-tab-btn {
+    min-height: 44px;
+  }
+  .portal-pill {
+    min-height: 38px;
+  }
+  .portal-set-check {
+    min-width: 26px;
+    min-height: 26px;
+  }
+}
+
+@media (max-width: 360px) {
+  .portal-header {
+    padding: calc(env(safe-area-inset-top, 0px) + 8px) 10px 8px;
+  }
+  .portal-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+  }
+  .portal-header-name {
+    font-size: 13.5px;
+  }
+  .portal-header-branch {
+    font-size: 10.5px;
+  }
+  .portal-qr-btn {
+    padding: 5px 8px;
+    font-size: 11px;
+    gap: 4px;
+  }
+  .portal-content {
+    padding: 10px 10px calc(env(safe-area-inset-bottom, 0px) + 74px);
+    gap: 12px;
+  }
+  .portal-pass-card {
+    padding: 14px 12px;
+    border-radius: 18px;
+    gap: 12px;
+  }
+  .portal-pass-plan {
+    font-size: 15px;
+  }
+  .portal-stat-grid {
+    gap: 8px;
+  }
+  .portal-stat-tile {
+    padding: 10px 10px;
+    border-radius: 14px;
+  }
+  .portal-stat-value {
+    font-size: 17px;
+  }
+  .portal-nav-inner {
+    padding: 4px 4px calc(env(safe-area-inset-bottom, 0px) + 4px);
+  }
+}

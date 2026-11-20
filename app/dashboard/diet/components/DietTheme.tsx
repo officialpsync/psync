@@ -25,6 +25,9 @@ export function DietStyles() {
 // NOTE: no backticks inside this CSS.
 const DT_CSS = `
 .ps-page.dt { max-width: none !important; margin: 0 !important; padding: 18px !important; }
+@media (min-width: 1920px) {
+  .ps-page.dt { max-width: 1680px !important; margin: 0 auto !important; }
+}
 .db.dt { max-width: none; }
 .dt { --dt-line: var(--separator); --dt-soft: #f5f6f9; --dt-g1: #0a66d6; --dt-g2: #3c4fe0; }
 
@@ -124,5 +127,16 @@ const DT_CSS = `
 .dt .db-plans { align-items: stretch; }
 .dt .db-plans > .db-card, .dt .db-plans > article { display: flex; flex-direction: column; height: 100%; }
 .dt .db-plan-foot { margin-top: auto; }
+
+@media (max-width: 360px) {
+  .ps-page.dt { padding: 8px 8px 20px !important; }
+  .dt-title h1, .dt .db-title { font-size: 19px; }
+  .dt-title-icon { width: 38px; height: 38px; border-radius: 11px; }
+  .dt-kpi { height: 42px; padding: 0 8px 0 6px; }
+  .dt-kpi small { font-size: 10px; }
+  .dt-kpi b { font-size: 14.5px; }
+  .dt-toolbar { padding: 8px; }
+  .dt-seg button { padding: 0 8px; font-size: 12.5px; }
+}
 
 `
