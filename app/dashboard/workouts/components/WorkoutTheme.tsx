@@ -39,6 +39,9 @@ export function WorkoutStyles() {
 const WK_CSS = `
 .ps-page.wk { max-width: none !important; margin: 0 !important; padding: 18px !important; }
 .db.wk { max-width: none; }
+@media (min-width: 1920px) {
+  .ps-page.wk { max-width: 1680px !important; margin: 0 auto !important; }
+}
 .wk { --wk-line: var(--separator); --wk-soft: #f5f6f9; }
 
 /* Breadcrumb */

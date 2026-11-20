@@ -284,7 +284,7 @@ const WL_CSS = `
 .wl-stats b { color: var(--text-primary); font-weight: 700; }
 .wl-members b { color: var(--gt); }
 .wl-notes { margin: 0; font-size: 12.5px; color: var(--text-tertiary); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.wl-foot { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--wk-line); background: #fbfbfd; }
+.wl-foot { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--wk-line); background: #fbfbfd; flex-wrap: wrap; }
 .wl-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--wk-line); background: #fff; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-primary); cursor: pointer; text-decoration: none; }
 .wl-btn:hover { border-color: var(--g1); color: var(--gt); }
 .wl-icon-btn { width: 32px; height: 32px; border-radius: 9px; border: none; background: none; display: grid; place-items: center; color: var(--text-tertiary); cursor: pointer; text-decoration: none; }
@@ -313,5 +313,9 @@ const WL_CSS = `
   .wl-card[data-layout="list"] { flex-direction: column; }
   .wl-card[data-layout="list"] .wl-foot { border-left: none; border-top: 1px solid var(--wk-line); }
   .wl-btn { height: 38px; }
+}
+@media (max-width: 360px) {
+  .wl-foot { gap: 4px; padding: 8px 10px; }
+  .wl-btn { padding: 0 8px; font-size: 12px; }
 }
 `

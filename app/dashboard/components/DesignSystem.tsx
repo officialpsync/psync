@@ -44,7 +44,10 @@ export const DB_CSS = `
   --teal-dim: var(--brand-2-dim);
   --teal-fill: var(--brand-2);
 }
-.db { max-width: 1320px; }
+.db { max-width: 1320px; width: 100%; }
+@media (min-width: 1920px) {
+  .db { max-width: 1680px; margin-left: auto; margin-right: auto; }
+}
 
 /* Entrance — staggered, transform/opacity only */
 @keyframes db-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
@@ -234,9 +237,11 @@ export const DB_CSS = `
   .db-banner-text, .db-banner-cta { display: none; }
 }
 @media (max-width: 380px) {
+  .db-kpis { grid-template-columns: minmax(0, 1fr); }
   .db-kpi-foot span:last-child { display: none; }
-  .db-hero-value { font-size: 36px; }
-  .db-ring { width: 96px; height: 96px; }
+  .db-hero-value { font-size: 32px; }
+  .db-ring { width: 88px; height: 88px; }
+  .db-actions-wrap .db-actions { grid-template-columns: minmax(0, 1fr); }
 }
 
 /* Reduced motion: keep fades, drop movement */
@@ -697,6 +702,11 @@ export const DB_CSS = `
   .dz-cell { padding: 12px; }
   .dz-cell-value { font-size: 20px; }
   .dz-editbar { flex-wrap: wrap; }
+}
+@media (max-width: 360px) {
+  .dz-cells { grid-template-columns: minmax(0, 1fr); }
+  .dz-cell-value { font-size: 18px; }
+  .db .dz-grid .db-actions { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
   .dz-tool, .dz-size, .dz-cell-chev { transition: background-color 150ms ease, color 150ms ease, opacity 150ms ease; }

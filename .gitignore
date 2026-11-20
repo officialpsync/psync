@@ -20,8 +20,11 @@
 # production
 /build
 
-# misc
-.DS_Store
+# mobile & android
+mobile/node_modules/
+*.apk
+.gradle/
+
 *.pem
 
 # debug

@@ -125,7 +125,7 @@ table.zl-table { border-collapse: separate; border-spacing: 0; width: max-conten
 .zl-pager { display: flex; align-items: center; gap: 6px; }
 
 /* Popovers */
-.zl-pop { position: absolute; z-index: 30; width: 280px; background: #fff; border: 1px solid var(--separator); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.14); padding: 10px; }
+.zl-pop { position: absolute; z-index: 30; width: 280px; max-width: min(280px, calc(100vw - 24px)); background: #fff; border: 1px solid var(--separator); border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.14); padding: 10px; }
 .zl-pop-title { font-size: 11.5px; font-weight: 650; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.4px; padding: 2px 4px 8px; }
 .zl-pop-list { display: flex; flex-direction: column; gap: 1px; max-height: 340px; overflow-y: auto; margin-top: 6px; }
 .zl-pop-row { display: flex; align-items: center; gap: 6px; padding: 3px 4px; border-radius: 6px; }
@@ -221,12 +221,37 @@ table.zl-table { border-collapse: separate; border-spacing: 0; width: max-conten
   .zd-main { padding: 10px 10px 40px; }
   .zd-page { padding: 10px 10px 20px; }
 }
-@media (max-width: 640px) { .zl-page, .zd-page { padding: 10px 10px 20px; } }
+@media (max-width: 640px) {
+  .zl-top { gap: 8px; }
+  .zl-title { width: 100%; justify-content: space-between; }
+  .zl-actions { width: 100%; justify-content: flex-start; }
+  .zl-actions .zl-btn { flex: 1 1 auto; justify-content: center; }
+  .zl-search { width: 100%; }
+  .zl-search input { width: 100% !important; }
+  .zl-toolbar { gap: 8px; padding: 8px; }
+  .zl-toolbar-sep { display: none; }
+  .zl-bulk { width: 100%; justify-content: space-between; }
+  .zl-page, .zd-page { padding: 10px !important; }
+}
+@media (max-width: 520px) {
+  .zd-row { grid-template-columns: minmax(0, 1fr) !important; gap: 3px; }
+  .zd-label { text-align: left; padding-top: 0; font-size: 11.5px; font-weight: 600; }
+  .zd-val { min-height: 28px; padding: 2px 4px; }
+  .zd-tl-item { grid-template-columns: 56px 28px minmax(0, 1fr); gap: 8px; }
+  .zd-tl::before { left: 70px; }
+  .zd-tl-day { margin-left: 20px; }
+  .zd-head { gap: 10px; padding: 12px; }
+  .zd-actions { width: 100%; margin-left: 0; }
+  .zd-actions .zl-btn { flex: 1 1 auto; justify-content: center; }
+}
 /* Equal 18px gutter on all four sides (shared with Members). On desktop the list fills the screen exactly. */
 .zl-page, .zd-page { padding: 18px !important; }
 @media (min-width: 900px) {
   .zl-page { height: 100dvh; display: flex; flex-direction: column; }
   .zl-page > .zl-body { flex: 1; height: auto; min-height: 0; }
+}
+@media (min-width: 1920px) {
+  .zl-page, .zd-page { max-width: 1720px; margin: 0 auto; }
 }
 @media (max-width: 640px) { .zl-page, .zd-page { padding: 10px !important; } }
 `;

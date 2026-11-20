@@ -628,6 +628,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;fo
 // NOTE: no backticks inside this CSS.
 const PY_CSS = `
 .ps-page.py { max-width: none !important; margin: 0 !important; padding: 18px !important; }
+@media (min-width: 1920px) {
+  .ps-page.py { max-width: 1680px !important; margin: 0 auto !important; }
+}
 .db.py { max-width: none; }
 .py { --py-line: var(--separator); }
 .py-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px 14px; margin-bottom: 14px; }
@@ -732,5 +735,16 @@ const PY_CSS = `
   .py-tr { grid-template-columns: minmax(0, 1fr) auto auto; padding: 10px 12px; min-height: 0; }
   .py-hide-sm { display: none; }
   .py-methodpick { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 520px) {
+  .py-kpis { grid-template-columns: 1fr; }
+}
+@media (max-width: 360px) {
+  .ps-page.py { padding: 8px 8px 20px !important; }
+  .py-title h1 { font-size: 20px; }
+  .py-title-icon { width: 38px; height: 38px; border-radius: 11px; }
+  .py-tr { padding: 8px 8px; gap: 6px; }
+  .py-amt { width: 100%; }
+  .py-amt input { flex: 1; width: auto; }
 }
 `

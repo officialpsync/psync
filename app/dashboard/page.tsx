@@ -1211,6 +1211,9 @@ export default function DashboardPage() {
 const OV_CSS = `
 .ps-page.ov { max-width: none !important; margin: 0 !important; padding: 18px !important; }
 .db.ov { max-width: none; }
+@media (min-width: 1920px) {
+  .ps-page.ov { max-width: 1680px !important; margin: 0 auto !important; }
+}
 
 .ov .db-header { align-items: center; margin-bottom: 12px; gap: 12px; }
 .ov .db-kicker { font-size: 11.5px; margin-bottom: 2px; }
@@ -1251,5 +1254,9 @@ const OV_CSS = `
   .ov .dz-cells { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ov .db-pad { padding: 12px 14px; }
   .ov .db-chart { height: 180px; }
+}
+@media (max-width: 360px) {
+  .ov .dz-cells { grid-template-columns: minmax(0, 1fr); }
+  .ov .db-title { font-size: 20px; }
 }
 `;

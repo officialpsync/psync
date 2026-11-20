@@ -345,6 +345,9 @@ export default function MembershipPlansPage() {
 // NOTE: no backticks inside this CSS.
 const MPL_CSS = `
 .ps-page.mpl { max-width: none !important; margin: 0 !important; padding: 18px !important; }
+@media (min-width: 1920px) {
+  .ps-page.mpl { max-width: 1680px !important; margin: 0 auto !important; }
+}
 .db.mpl { max-width: none; }
 .mpl { --mpl-line: var(--separator); }
 .mpl-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px 14px; margin-bottom: 14px; }
@@ -417,5 +420,13 @@ const MPL_CSS = `
   .mpl-search input { font-size: 16px; }
   .mpl-seg { overflow-x: auto; max-width: 100%; }
   .mpl-grid { grid-template-columns: minmax(0, 1fr); gap: 10px; }
+}
+@media (max-width: 420px) {
+  .mpl-kpis { grid-template-columns: 1fr; }
+}
+@media (max-width: 360px) {
+  .ps-page.mpl { padding: 8px 8px 20px !important; }
+  .mpl-title h1 { font-size: 20px; }
+  .mpl-title-icon { width: 38px; height: 38px; border-radius: 11px; }
 }
 `
