@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
-import { BookOpen, Calendar, Camera, ChevronRight, Copy, Dumbbell, Loader2, LogIn, LogOut, Pencil, Plus, RefreshCw, Salad, Search, Wallet, UserCheck, X } from "lucide-react";
+import { BookOpen, Calendar, Camera, ChevronRight, Copy, Dumbbell, Loader2, LogIn, LogOut, Pencil, Plus, QrCode, RefreshCw, Salad, Search, Wallet, UserCheck, X } from "lucide-react";
 import {
   Avatar, BackLink, cols, formatDate, formatINR, formatTime, Segmented, Skeleton, useToast,
 } from "../../components/ui";
@@ -938,6 +938,25 @@ export default function MemberProfilePage() {
 
   const menu = [
     { label: active ? "Renew membership" : "Add membership", icon: RefreshCw, run: () => setRenewSheetOpen(true) },
+    { label: "WhatsApp Member Pass Link", icon: MessageCircle, run: () => {
+      const portalUrl = typeof window !== "undefined" ? `${window.location.origin}/portal?m=${member.id}` : `/portal?m=${member.id}`;
+      const msg = `Hi ${first}, here is your personal Psync gym pass, workout routine & diet plan: ${portalUrl}`;
+      if (member.phone) {
+        window.open(`https://wa.me/${member.phone.replace(/\D/g, "")}?text=${encodeURIComponent(msg)}`, "_blank");
+      } else {
+        navigator.clipboard.writeText(portalUrl);
+        show("Member pass link copied to clipboard");
+      }
+    }},
+    { label: "Copy Member Portal Link", icon: Copy, run: () => {
+      const portalUrl = typeof window !== "undefined" ? `${window.location.origin}/portal?m=${member.id}` : `/portal?m=${member.id}`;
+      navigator.clipboard.writeText(portalUrl);
+      show("Member portal link copied to clipboard");
+    }},
+    { label: "Preview Member Pass", icon: QrCode, run: () => {
+      const portalUrl = typeof window !== "undefined" ? `${window.location.origin}/portal?m=${member.id}` : `/portal?m=${member.id}`;
+      window.open(portalUrl, "_blank");
+    }},
     { label: activeProgram ? "Change workout" : "Assign workout", icon: Dumbbell, run: () => setAssignSheetOpen(true) },
     { label: "Book a class", icon: BookOpen, run: () => setBookClassSheetOpen(true) },
     ...(activeDiet ? [{ label: "Copy diet plan", icon: Copy, run: () => openCopy("diet", activeDiet.id) }] : []),
@@ -1424,6 +1443,9 @@ export default function MemberProfilePage() {
 // NOTE: no backticks inside this CSS.
 const MP_CSS = `
 .ps-page.mp { max-width: none !important; margin: 0 !important; padding: 18px !important; }
+@media (min-width: 1920px) {
+  .ps-page.mp { max-width: 1680px !important; margin: 0 auto !important; }
+}
 .mp { --mp-line: var(--separator); --mp-soft: #f5f6f9; }
 .mp-hidden { position: absolute; width: 0; height: 0; opacity: 0; pointer-events: none; }
 .mp-muted { color: var(--text-tertiary); font-size: 12.5px; }
@@ -1661,10 +1683,16 @@ a.mp-row:hover { background: var(--mp-soft); }
   .mp-summary strong { font-size: 15px; }
   .mp-hrow { grid-template-columns: minmax(0,1fr) auto; }
   .mp-hrow small { grid-column: 1; grid-row: 2; }
-  .mp-menu { position: fixed; left: 10px; right: 10px; top: auto; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); }
+  .mp-menu { position: fixed; left: 10px; right: 10px; top: auto; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); z-index: 60; }
   .mp-bottombar { position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar-h, 0px) + env(safe-area-inset-bottom, 0px)); z-index: 40; display: flex; gap: 8px; padding: 10px 12px; background: rgba(255,255,255,0.92); border-top: 1px solid var(--mp-line); backdrop-filter: blur(16px) saturate(180%); }
   .mp-bottombar .ps-btn { flex: 1; height: 46px; justify-content: center; border-radius: 12px; }
   .mp-bb-btn { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; background: #e6f6ec; color: #1f8a3b; flex-shrink: 0; }
+}
+@media (max-width: 440px) {
+  .mp-metrics { grid-template-columns: repeat(auto-fit, minmax(88px, 1fr)); gap: 6px; }
+  .mp-metric { padding: 8px 10px; }
+  .mp-metric strong { font-size: 15px; }
+  .mp-summary { grid-template-columns: 1fr; }
 }
 /* Editable overview */
 .mp-wgrid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); grid-auto-rows: 2px; column-gap: 14px; row-gap: 0; grid-auto-flow: row dense; align-items: start; }
