@@ -265,18 +265,18 @@ const WL_CSS = `
 .wl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
 .wl-grid[data-layout="list"] { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 
-.wl-card { display: flex; flex-direction: column; background: #fff; border: 1px solid var(--wk-line); border-radius: 18px; overflow: hidden; transition: box-shadow 160ms, transform 160ms; }
-.wl-card:hover { box-shadow: 0 14px 30px -16px rgba(15,23,42,0.35); transform: translateY(-2px); }
+.wl-card { display: flex; flex-direction: column; background: var(--surface, #fff); border: 1px solid var(--wk-line); border-radius: 18px; overflow: hidden; transition: box-shadow 160ms, transform 160ms; color: var(--text-primary); }
+.wl-card:hover { box-shadow: var(--shadow-md, 0 14px 30px -16px rgba(15,23,42,0.35)); transform: translateY(-2px); }
 .wl-link { display: flex; flex-direction: column; color: inherit; text-decoration: none; flex: 1; }
 .wl-band { position: relative; display: flex; align-items: center; gap: 8px; height: 64px; padding: 0 14px; color: #fff; background: radial-gradient(160px 80px at 90% -20%, rgba(255,255,255,0.35), transparent 70%), linear-gradient(120deg, var(--g1), var(--g2)); }
 .wl-icon { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; background: rgba(255,255,255,0.22); border: 1px solid rgba(255,255,255,0.3); }
 .wl-kind { font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; opacity: 0.92; }
 .wl-live { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 9px; border-radius: 12px; background: rgba(255,255,255,0.95); color: var(--gt); font-size: 12px; font-weight: 700; }
 .wl-body { padding: 14px 16px 12px; display: flex; flex-direction: column; gap: 9px; }
-.wl-body h3 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.015em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wl-body h3 { margin: 0; font-size: 16px; font-weight: 700; letter-spacing: -0.015em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary); }
 .wl-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .wl-goal { height: 24px; padding: 0 10px; border-radius: 12px; display: inline-flex; align-items: center; font-size: 12px; font-weight: 650; background: var(--gs); color: var(--gt); }
-.wl-level { height: 24px; padding: 0 10px; border-radius: 12px; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; background: #f2f3f6; color: var(--text-secondary); }
+.wl-level { height: 24px; padding: 0 10px; border-radius: 12px; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; background: var(--surface-2, #f2f3f6); color: var(--text-secondary); }
 .wl-level .wk-diff { color: var(--gt); }
 .wl-stats { display: flex; gap: 14px; flex-wrap: wrap; font-size: 13px; color: var(--text-secondary); }
 .wl-stats span { display: inline-flex; align-items: center; gap: 5px; }
@@ -284,11 +284,11 @@ const WL_CSS = `
 .wl-stats b { color: var(--text-primary); font-weight: 700; }
 .wl-members b { color: var(--gt); }
 .wl-notes { margin: 0; font-size: 12.5px; color: var(--text-tertiary); line-height: 1.45; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.wl-foot { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--wk-line); background: #fbfbfd; flex-wrap: wrap; }
-.wl-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--wk-line); background: #fff; font: inherit; font-size: 13px; font-weight: 600; color: var(--text-primary); cursor: pointer; text-decoration: none; }
-.wl-btn:hover { border-color: var(--g1); color: var(--gt); }
+.wl-foot { display: flex; align-items: center; gap: 6px; padding: 10px 12px; border-top: 1px solid var(--wk-line); background: var(--surface-2, #fbfbfd); flex-wrap: wrap; }
+.wl-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 9px; border: 1px solid var(--wk-line); background: var(--surface, #fff); font: inherit; font-size: 13px; font-weight: 600; color: var(--text-primary); cursor: pointer; text-decoration: none; }
+.wl-btn:hover { border-color: var(--g1); color: var(--gt); background: var(--surface-3); }
 .wl-icon-btn { width: 32px; height: 32px; border-radius: 9px; border: none; background: none; display: grid; place-items: center; color: var(--text-tertiary); cursor: pointer; text-decoration: none; }
-.wl-icon-btn:hover { background: #eef0f4; color: var(--text-primary); }
+.wl-icon-btn:hover { background: var(--surface-3, #eef0f4); color: var(--text-primary); }
 
 .wl-card[data-layout="list"] { flex-direction: row; align-items: stretch; border-radius: 14px; }
 .wl-card[data-layout="list"]:hover { transform: none; }
@@ -299,7 +299,7 @@ const WL_CSS = `
 .wl-card[data-layout="list"] .wl-body h3 { flex: 1; min-width: 0; font-size: 15px; }
 .wl-card[data-layout="list"] .wl-foot { border-top: none; border-left: 1px solid var(--wk-line); }
 
-.wl-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 230px; border: 1.5px dashed #c9cfda; border-radius: 18px; color: var(--accent); text-decoration: none; background: #fafbff; transition: border-color 150ms; }
+.wl-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; min-height: 230px; border: 1.5px dashed var(--border-mid, #c9cfda); border-radius: 18px; color: var(--accent); text-decoration: none; background: var(--surface-2, #fafbff); transition: border-color 150ms; }
 .wl-add:hover { border-color: var(--accent); }
 .wl-add span { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: linear-gradient(135deg, #0a66d6, #3c4fe0); color: #fff; margin-bottom: 4px; }
 .wl-add strong { font-size: 15px; } .wl-add small { font-size: 12.5px; color: var(--text-tertiary); }
@@ -317,5 +317,23 @@ const WL_CSS = `
 @media (max-width: 360px) {
   .wl-foot { gap: 4px; padding: 8px 10px; }
   .wl-btn { padding: 0 8px; font-size: 12px; }
+}
+
+html[data-theme="dark"] .wl-card, html.dark .wl-card {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+html[data-theme="dark"] .wl-foot, html.dark .wl-foot {
+  background: var(--surface-2) !important;
+  border-color: var(--border) !important;
+}
+html[data-theme="dark"] .wl-btn, html.dark .wl-btn {
+  background: var(--surface-2) !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
+}
+html[data-theme="dark"] .wl-add, html.dark .wl-add {
+  background: var(--surface-2) !important;
+  border-color: var(--border-mid) !important;
 }
 `

@@ -79,6 +79,57 @@
 }
 
 /* ==========================================================================
+   Dark theme tokens
+   ========================================================================== */
+html[data-theme="dark"],
+html.dark {
+  color-scheme: dark;
+
+  --bg:           #0d0f14;
+  --surface:      #15171e;
+  --surface-2:    #1c1f28;
+  --surface-3:    #252936;
+  --fill:         rgba(255, 255, 255, 0.06);
+  --fill-2:       rgba(255, 255, 255, 0.10);
+  --fill-3:       rgba(255, 255, 255, 0.16);
+  --fill-strong:  var(--fill-2);
+
+  --border:        rgba(255, 255, 255, 0.08);
+  --border-mid:    rgba(255, 255, 255, 0.14);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --separator:     rgba(255, 255, 255, 0.08);
+
+  --text-primary:   #f4f5f8;
+  --text-secondary: #9ea3ae;
+  --text-tertiary:  #6c7280;
+  --text-link:      #439bfb;
+
+  --shadow-sm:   0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 0 0 1px rgba(255, 255, 255, 0.07), 0 2px 6px rgba(0, 0, 0, 0.35);
+  --shadow-md:   0 0 0 1px rgba(255, 255, 255, 0.08), 0 8px 24px rgba(0, 0, 0, 0.45);
+  --shadow-lg:   0 0 0 1px rgba(255, 255, 255, 0.09), 0 24px 64px rgba(0, 0, 0, 0.65);
+
+  --sidebar-bg:        #12141a;
+  --sidebar-fg:        #f4f5f8;
+  --sidebar-muted:     rgba(244, 245, 248, 0.70);
+  --sidebar-faint:     rgba(244, 245, 248, 0.45);
+  --sidebar-border:    rgba(255, 255, 255, 0.08);
+  --sidebar-hover-bg:  rgba(255, 255, 255, 0.06);
+  --sidebar-active-bg: rgba(10, 102, 214, 0.20);
+  --sidebar-active-fg: #3b99fc;
+
+  /* Module-specific borders & lines in dark mode */
+  --mpl-line: rgba(255, 255, 255, 0.08);
+  --sf-line:  rgba(255, 255, 255, 0.08);
+  --st-line:  rgba(255, 255, 255, 0.08);
+  --mb-line:  rgba(255, 255, 255, 0.08);
+  --dt-line:  rgba(255, 255, 255, 0.08);
+  --wk-line:  rgba(255, 255, 255, 0.08);
+  --py-line:  rgba(255, 255, 255, 0.08);
+  --db-border: rgba(255, 255, 255, 0.08);
+}
+
+/* ==========================================================================
    Base
    ========================================================================== */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1068,4 +1119,927 @@ svg.lucide { stroke-width: 1.8; }
   .ps-sheet-root .ps-sheet { transform: none !important; transition: opacity 200ms ease !important; opacity: 0; }
   .ps-sheet-root[data-open="true"] .ps-sheet { opacity: 1; }
   .ps-sheet-root .ps-sheet-backdrop { transition: opacity 200ms ease !important; }
+}
+
+/* ==========================================================================
+   Dark mode element overrides — Comprehensive & Contrast Compliant
+   ========================================================================== */
+html[data-theme="dark"],
+html.dark {
+  /* Cards, Boxes & Panels across all modules */
+  .ps-card,
+  .db-card,
+  .db-action,
+  .zl-body,
+  .zl-card,
+  .zl-toolbar,
+  .zl-panel,
+  .zl-foot,
+  .zl-pfoot,
+  .zl-board,
+  .zl-col,
+  .zl-list,
+  .zd-shell,
+  .zd-head,
+  .zd-card,
+  .zd-rel,
+  .zd-sidebar,
+  .py-card,
+  .py-kpi,
+  .py-toolbar,
+  .py-empty,
+  .py-summary,
+  .mpl-card,
+  .mpl-toolbar,
+  .mpl-kpi,
+  .mpl-empty,
+  .ps-plan,
+  .st-card,
+  .st-progress,
+  .st-nav,
+  .st-receipt,
+  .st-savebar,
+  .sf-card,
+  .sf-toolbar,
+  .sf-kpi,
+  .sf-empty,
+  .sf-perm-card,
+  .cl-card,
+  .cl-kpi,
+  .cl-toolbar,
+  .mb-card,
+  .mb-toolbar,
+  .mb-kpi,
+  .mp-card,
+  .mp-plan,
+  .mp-summary > div,
+  .mp-bottombar,
+  .me-card,
+  .me-nav-inner,
+  .cp-card,
+  .cp-kind,
+  .cp-plan,
+  .cp-member,
+  .dt-toolbar,
+  .dt-kpi,
+  .dt-card,
+  .dt-empty,
+  .db-inglist,
+  .db-nutri,
+  .rl-card,
+  .ig-card,
+  .wk-toolbar,
+  .wk-kpi,
+  .wk-card,
+  .wk-empty,
+  .wl-card,
+  .xl-card,
+  .pb-card,
+  .at-card,
+  .at-toolbar,
+  .at-kpi,
+  .rp-card,
+  .rp-filters,
+  .rp-table,
+  .rp-kpi,
+  .ps-list,
+  .ps-class,
+  .ps-sheet-root .ps-sheet,
+  .ps-sheet-root .ps-sheet-header {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+    box-shadow: var(--shadow-card) !important;
+  }
+
+  /* Sub-surfaces & Table Headers */
+  th,
+  .zl-table th,
+  .mb-th,
+  .rp-table th,
+  .cl-ag-day h3,
+  .cl-days,
+  .py-day,
+  .at-th,
+  .zd-main,
+  .ps-sheet-root .ps-sheet-footer,
+  .mpl-foot,
+  .cp-steps li,
+  .mp-tabs,
+  .ps-combo-foot,
+  .db-update-cell,
+  .dz-tools {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-secondary) !important;
+  }
+
+  /* Form controls across all pages */
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea,
+  .ps-input,
+  .ps-select,
+  .zl-in,
+  .zl-search input,
+  .zl-bulk select,
+  .zl-foot select,
+  .py-search input,
+  .py-amt input,
+  .py-bigamt,
+  .py-select,
+  .mpl-search input,
+  .mpl-select,
+  .st-hex input,
+  .st-in,
+  .sf-search input,
+  .cl-search input,
+  .mb-search input,
+  .dt-search input,
+  .dt-select,
+  .wk-search input,
+  .wk-select,
+  .db-search input,
+  .rp-dates input,
+  .rp-select,
+  .rp-fsearch input,
+  .rp-tsearch input,
+  .cp-input,
+  .cp-search input,
+  .me-in {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+    color-scheme: dark !important;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus,
+  .ps-input:focus,
+  .ps-select:focus,
+  .zl-in:focus,
+  .zl-search input:focus,
+  .py-search input:focus,
+  .py-amt input:focus,
+  .py-bigamt:focus-within,
+  .mpl-search input:focus,
+  .mpl-select:focus,
+  .sf-search input:focus,
+  .cl-search input:focus,
+  .mb-search input:focus,
+  .dt-search input:focus,
+  .dt-select:focus,
+  .wk-search input:focus,
+  .wk-select:focus,
+  .db-search input:focus,
+  .rp-fsearch input:focus,
+  .rp-tsearch input:focus,
+  .cp-input:focus,
+  .cp-search input:focus {
+    background: var(--surface) !important;
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px var(--accent-dim) !important;
+    outline: none !important;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--text-tertiary) !important;
+  }
+
+  /* Tables & Rows */
+  table, td,
+  .db-table-head,
+  .db-trow,
+  .zl-table td,
+  .mb-tr,
+  .mb-row,
+  .py-tr,
+  .sf-row,
+  .cl-ag-row,
+  .at-row,
+  .rp-table td,
+  .mp-row,
+  .ps-cell,
+  .mp-history,
+  .mp-prog,
+  .mp-plan-actions,
+  .st-branch {
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+
+  .zl-table td {
+    background: transparent !important;
+  }
+
+  tr:hover,
+  tr:hover td,
+  .db-trow:hover,
+  .zl-table tbody tr:hover td,
+  .cl-ag-row:hover,
+  .sf-row:hover,
+  .mb-tr:hover,
+  .py-tr:hover,
+  .rp-table tr:hover td,
+  .ps-row--link:hover,
+  .db-row--link:hover,
+  .mp-row:hover,
+  .at-row:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+  }
+
+  .zl-table tbody tr[data-sel="true"] td,
+  .mb-tr[data-sel="true"] {
+    background: var(--accent-dim) !important;
+  }
+
+  /* Neutral Buttons, Chips, and Toggles */
+  .ps-btn--secondary,
+  .zl-btn:not(.zl-btn--primary),
+  .zl-tbtn,
+  .mpl-btn,
+  .cl-arrow,
+  .cl-trainers button:not([aria-pressed="true"]),
+  .st-opts button:not([aria-pressed="true"]),
+  .st-pill,
+  .st-ring b,
+  .sf-perm-actions button,
+  .mb-choice,
+  .mb-kind,
+  .py-quick button:not([aria-pressed="true"]),
+  .py-methodpick button:not([aria-pressed="true"]),
+  .py-method:not([aria-pressed="true"]),
+  .sf-chip:not([aria-pressed="true"]),
+  .dt-chip:not([aria-pressed="true"]),
+  .wk-chip:not([aria-pressed="true"]),
+  .dz-size:not([aria-pressed="true"]),
+  .db-week-arrow,
+  .zd-ibtn,
+  .zd-chip:not([data-on="true"]),
+  .zl-badge,
+  .zl-psec-h,
+  .rp-tbtn,
+  .rp-tpager button,
+  .rp-more-btn:not([data-on="true"]),
+  .wl-btn,
+  .mp-tabs-edit,
+  .cp-days button {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+
+  .ps-btn--secondary:hover,
+  .zl-btn:not(.zl-btn--primary):hover,
+  .zl-tbtn:hover,
+  .mpl-btn:hover,
+  .cl-arrow:hover,
+  .cl-trainers button:not([aria-pressed="true"]):hover,
+  .st-opts button:not([aria-pressed="true"]):hover,
+  .st-pill:hover,
+  .sf-perm-actions button:hover,
+  .mb-choice:hover,
+  .mb-kind:hover,
+  .py-quick button:not([aria-pressed="true"]):hover,
+  .py-methodpick button:not([aria-pressed="true"]):hover,
+  .py-method:not([aria-pressed="true"]):hover,
+  .sf-chip:not([aria-pressed="true"]):hover,
+  .dt-chip:not([aria-pressed="true"]):hover,
+  .wk-chip:not([aria-pressed="true"]):hover,
+  .zd-ibtn:hover,
+  .zd-chip:not([data-on="true"]):hover,
+  .rp-tbtn:hover,
+  .rp-tpager button:hover,
+  .rp-more-btn:hover,
+  .wl-btn:hover,
+  .cp-days button:hover {
+    background: var(--surface-3) !important;
+    border-color: var(--border-mid) !important;
+    color: #ffffff !important;
+  }
+
+  /* Segmented Controls & Tabs */
+  .mpl-seg,
+  .sf-seg,
+  .cl-views,
+  .dt-seg,
+  .wk-seg,
+  .py-seg,
+  .zd-tabs,
+  .ov .db-period-toggle,
+  .rp-seg,
+  .rp-fgroup,
+  .dz-tabs {
+    background: var(--surface-2) !important;
+    border: 1px solid var(--border) !important;
+  }
+
+  .mpl-seg button,
+  .sf-seg button,
+  .cl-views button,
+  .dt-seg button,
+  .wk-seg button,
+  .py-seg button,
+  .zd-tab,
+  .ov .db-period-btn,
+  .rp-seg button,
+  .rp-fgroup button,
+  .dz-tab {
+    color: var(--text-secondary);
+    background: transparent;
+  }
+
+  .mpl-seg button[aria-selected="true"],
+  .sf-seg button[aria-selected="true"],
+  .cl-views button[aria-selected="true"],
+  .dt-seg button[aria-selected="true"],
+  .dt-seg button[aria-pressed="true"],
+  .wk-seg button[aria-selected="true"],
+  .wk-seg button[aria-pressed="true"],
+  .py-seg button[aria-selected="true"],
+  .zd-tab[data-on="true"],
+  .ov .db-period-btn.active,
+  .rp-seg button[aria-pressed="true"],
+  .rp-fgroup button[aria-pressed="true"],
+  .dz-tab[aria-selected="true"] {
+    background: var(--surface-3) !important;
+    color: #ffffff !important;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45) !important;
+  }
+
+  /* Popovers, Menus, Sheets, Dropdowns */
+  .zl-pop,
+  .zl-opts,
+  .zd-menu,
+  .py-results,
+  .mb-pop,
+  .mb-menu,
+  .mp-menu,
+  .ps-combo-menu,
+  .ps-sheet-panel,
+  .ps-sheet {
+    background: var(--surface-2) !important;
+    border-color: var(--border-mid) !important;
+    color: var(--text-primary) !important;
+    box-shadow: var(--shadow-lg) !important;
+  }
+
+  .py-results button,
+  .zl-pop-row,
+  .zd-menu button,
+  .mb-menu button,
+  .zd-rel-item {
+    background: var(--surface-2) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border) !important;
+  }
+
+  .py-results button:hover,
+  .zl-pop-row:hover,
+  .zd-menu button:hover,
+  .mb-menu button:hover,
+  .zd-rel-item:hover,
+  .ps-combo-item:hover {
+    background: var(--surface-3) !important;
+    color: #ffffff !important;
+  }
+
+  /* Status Badges & Pills in Dark Mode */
+  .db-pill--green,
+  .sf-pill--green,
+  .zl-pill[data-tone="green"],
+  .ps-badge--green {
+    background: rgba(52, 199, 89, 0.18) !important;
+    color: #34c759 !important;
+    border: 1px solid rgba(52, 199, 89, 0.35) !important;
+  }
+
+  .db-pill--blue,
+  .sf-pill--blue,
+  .py-pill,
+  .zl-pill[data-tone="blue"],
+  .ps-badge--blue {
+    background: rgba(10, 132, 255, 0.18) !important;
+    color: #58a6ff !important;
+    border: 1px solid rgba(10, 132, 255, 0.35) !important;
+  }
+
+  .db-pill--amber,
+  .sf-pill--amber,
+  .mb-warn,
+  .cl-first,
+  .zl-pill[data-tone="amber"],
+  .ps-badge--amber,
+  .st-nav em,
+  .me-bmi--amber {
+    background: rgba(255, 159, 10, 0.18) !important;
+    color: #ff9f0a !important;
+    border: 1px solid rgba(255, 159, 10, 0.35) !important;
+  }
+
+  .db-pill--red,
+  .zl-btn--danger,
+  .zd-tag-red,
+  .zl-pill[data-tone="red"],
+  .ps-badge--red,
+  .me-error,
+  .me-bmi--red {
+    background: rgba(255, 69, 58, 0.18) !important;
+    color: #ff6961 !important;
+    border: 1px solid rgba(255, 69, 58, 0.35) !important;
+  }
+
+  .db-pill--purple,
+  .zl-pill[data-tone="purple"],
+  .ps-badge--purple {
+    background: rgba(175, 82, 222, 0.18) !important;
+    color: #bf5af2 !important;
+    border: 1px solid rgba(175, 82, 222, 0.35) !important;
+  }
+
+  .db-trend--up {
+    background: rgba(52, 199, 89, 0.18) !important;
+    color: #34c759 !important;
+  }
+  .db-trend--down {
+    background: rgba(255, 69, 58, 0.18) !important;
+    color: #ff6961 !important;
+  }
+  .db-trend--flat {
+    background: var(--fill) !important;
+    color: var(--text-secondary) !important;
+  }
+
+  /* Members page tabs: clean normal underline tabs, no pill backgrounds or borders in dark mode */
+  .mb-tabs {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+  .mb-tabs button {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    color: var(--text-secondary) !important;
+    box-shadow: none !important;
+  }
+  .mb-tabs button:hover {
+    color: #ffffff !important;
+    background: transparent !important;
+  }
+  .mb-tabs button[aria-selected="true"] {
+    background: transparent !important;
+    border: none !important;
+    border-bottom: 2px solid var(--accent) !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+  }
+  .mb-tabs button[aria-selected="true"][data-tone="active"] {
+    border-bottom-color: #34c759 !important;
+    background: transparent !important;
+    color: #ffffff !important;
+  }
+  .mb-tabs button[aria-selected="true"][data-tone="expiring"] {
+    border-bottom-color: #ff9f0a !important;
+    background: transparent !important;
+    color: #ffffff !important;
+  }
+  .mb-tabs button[aria-selected="true"][data-tone="expired"] {
+    border-bottom-color: #ff453a !important;
+    background: transparent !important;
+    color: #ffffff !important;
+  }
+  .mb-tabs button[aria-selected="true"][data-tone="none"] {
+    border-bottom-color: var(--text-secondary) !important;
+    background: transparent !important;
+    color: #ffffff !important;
+  }
+  .mb-tabs .mb-count {
+    background: var(--surface-3) !important;
+    color: var(--text-secondary) !important;
+  }
+  .mb-tabs button[aria-selected="true"] .mb-count {
+    background: rgba(10, 132, 255, 0.2) !important;
+    color: #58a6ff !important;
+  }
+  .mb-tabs button[aria-selected="true"][data-tone="active"] .mb-count {
+    background: rgba(52, 199, 89, 0.2) !important;
+    color: #34c759 !important;
+  }
+  .mb-tabs button[aria-selected="true"][data-tone="expiring"] .mb-count {
+    background: rgba(255, 159, 10, 0.2) !important;
+    color: #ff9f0a !important;
+  }
+  .mb-tabs button[aria-selected="true"][data-tone="expired"] .mb-count {
+    background: rgba(255, 69, 58, 0.2) !important;
+    color: #ff6961 !important;
+  }
+
+  /* Single member profile tabs & theme in dark mode */
+  .mp {
+    --mp-line: var(--border) !important;
+    --mp-soft: var(--surface-2) !important;
+  }
+  .mp-tabs {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+  }
+  .mp-tabs button {
+    color: var(--text-secondary) !important;
+  }
+  .mp-tabs button:hover {
+    color: #ffffff !important;
+    background: var(--surface-3) !important;
+  }
+  .mp-tabs button[aria-selected="true"] {
+    background: var(--accent) !important;
+    color: #ffffff !important;
+    box-shadow: 0 4px 12px rgba(10, 132, 255, 0.35) !important;
+  }
+  .mp-tabs button[aria-selected="true"] .mp-count {
+    background: rgba(255, 255, 255, 0.25) !important;
+    color: #ffffff !important;
+  }
+
+  /* Overview Updates Cells */
+  .ov .db-update-cell {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+
+  .ov .db-update-cell:hover {
+    background: var(--surface-3) !important;
+    border-color: var(--border-mid) !important;
+  }
+
+  /* Recharts & Charts */
+  .recharts-cartesian-grid line,
+  .recharts-cartesian-grid-horizontal line,
+  .recharts-cartesian-grid-vertical line {
+    stroke: rgba(255, 255, 255, 0.08) !important;
+  }
+
+  .recharts-text,
+  .recharts-cartesian-axis-tick text {
+    fill: #a0a6b5 !important;
+  }
+
+  .recharts-default-tooltip,
+  .db-tip,
+  .rp-tip {
+    background: rgba(20, 23, 31, 0.95) !important;
+    border: 1px solid rgba(255, 255, 255, 0.14) !important;
+    color: #f6f7fb !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+  }
+
+  /* Mobile Bars */
+  .ps-topbar {
+    background: rgba(13, 15, 20, 0.85) !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+  .ps-topbar[data-scrolled="true"] {
+    background: rgba(13, 15, 20, 0.96) !important;
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  }
+  .ps-tabbar {
+    background: rgba(18, 20, 26, 0.94) !important;
+    border-top: 1px solid var(--border) !important;
+  }
+
+  /* ==========================================================================
+     High-Specificity Dark Theme Overrides for Targeted Modules
+     ========================================================================== */
+
+  /* 1. Settings: Receipt Preview & Settings Navigation */
+  .st-receipt {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+    box-shadow: var(--shadow-sm) !important;
+  }
+  .st-receipt-logo {
+    background: var(--surface-3) !important;
+    color: var(--accent) !important;
+  }
+  .st-receipt-text b {
+    color: var(--text-primary) !important;
+  }
+  .st-receipt-text small {
+    color: var(--text-tertiary) !important;
+  }
+  .st-receipt-tag {
+    color: var(--accent) !important;
+  }
+  .st-logo-box {
+    background: var(--surface-2) !important;
+    border-color: var(--border-mid) !important;
+    color: var(--text-tertiary) !important;
+  }
+  .st-nav {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+  }
+  .st-nav button:hover {
+    background: var(--surface-2) !important;
+  }
+  .st-nav button[aria-current="true"] {
+    background: var(--accent-dim) !important;
+  }
+  .st-nav-icon {
+    background: var(--surface-3) !important;
+  }
+  .st-team-stats div {
+    background: var(--surface-2) !important;
+    color: var(--text-primary) !important;
+  }
+  .st-savebar {
+    background: rgba(20, 23, 31, 0.96) !important;
+    border-color: var(--border) !important;
+  }
+
+  /* 2. Recipe Cards & Diet Recipes */
+  .rl-card {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .rl-card:hover {
+    border-color: var(--border-mid) !important;
+    box-shadow: 0 12px 28px -18px rgba(0, 0, 0, 0.6) !important;
+  }
+  .rl-card[data-open="true"] {
+    border-color: var(--accent) !important;
+    box-shadow: 0 0 0 3px var(--accent-dim) !important;
+  }
+  .rl-card[data-open="true"] .rl-main {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+  }
+  .rl-detail {
+    background: var(--surface) !important;
+  }
+  .rl-macros > div {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+  }
+  .rl-ings span {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .rl-btn {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .rl-btn:hover {
+    background: var(--surface-3) !important;
+  }
+  .rl-tags i.rl-diet {
+    background: var(--surface-2) !important;
+    color: var(--text-secondary) !important;
+    border: 1px solid var(--border) !important;
+  }
+  .ai-credits {
+    background: var(--surface-2) !important;
+    color: var(--accent) !important;
+    border: 1px solid var(--border) !important;
+  }
+  .ai-credits-bar {
+    background: var(--surface-3) !important;
+  }
+  .ai-out {
+    background: rgba(255, 159, 10, 0.15) !important;
+    color: #ff9f0a !important;
+    border: 1px solid rgba(255, 159, 10, 0.3) !important;
+  }
+
+  /* 3. Diet Ingredients Page */
+  .ig-card {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+  }
+  .ig-head {
+    background: var(--surface-2) !important;
+    color: var(--text-secondary) !important;
+    border-color: var(--border) !important;
+  }
+  .ig-tr {
+    background: transparent !important;
+    border-bottom: 1px solid var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .ig-row:hover {
+    background: rgba(255, 255, 255, 0.04) !important;
+  }
+  .ig-group {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-secondary) !important;
+  }
+  .ig-pbtn {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-secondary) !important;
+  }
+  .ig-pbtn:hover:not(:disabled) {
+    background: var(--surface-3) !important;
+    color: var(--text-primary) !important;
+  }
+  .ig-foot {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+  }
+
+  /* 4. Workout Cards & Plan Builder */
+  .wl-card {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .wl-foot {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+  }
+  .wl-btn {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .wl-btn:hover {
+    background: var(--surface-3) !important;
+  }
+  .wl-level {
+    background: var(--surface-2) !important;
+    color: var(--text-secondary) !important;
+  }
+  .wl-add {
+    background: var(--surface-2) !important;
+    border-color: var(--border-mid) !important;
+  }
+  .xl-card {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .xl-cover {
+    background: var(--surface-2) !important;
+  }
+  .xl-flag {
+    background: var(--surface-2) !important;
+    color: var(--text-primary) !important;
+    border: 1px solid var(--border) !important;
+  }
+  .pb-card {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .pb-day {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .pb-goal {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-secondary) !important;
+  }
+  .pb-seg {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+  }
+  .pb-seg button[aria-checked="true"] {
+    background: var(--surface-3) !important;
+    color: #fff !important;
+  }
+  .pb-savebar {
+    background: rgba(20, 23, 31, 0.96) !important;
+    border-color: var(--border) !important;
+  }
+  .pb .db-exrow {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .pb .db-mini input {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .pb .db-note-input {
+    background: var(--surface-2) !important;
+    border-color: var(--border-mid) !important;
+    color: var(--text-primary) !important;
+  }
+  .wv-card {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .wv-day {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .wv-day[data-rest="true"] {
+    background: var(--surface-2) !important;
+  }
+
+  /* 5. Reports Page Sections & Tools */
+  .rp-filters {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .rp-card {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .rp-kpi {
+    background: var(--surface) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .rp-table th {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+  }
+  .rp-table td {
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+  }
+  .rp-table tr:hover td {
+    background: rgba(255, 255, 255, 0.04) !important;
+  }
+  .rp-seg {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+  }
+  .rp-seg button {
+    color: var(--text-secondary) !important;
+  }
+  .rp-seg button[aria-pressed="true"] {
+    background: var(--surface-3) !important;
+    color: #fff !important;
+  }
+  .rp-dates input,
+  .rp-select,
+  .rp-more-btn,
+  .rp-fsearch input,
+  .rp-tsearch input,
+  .rp-amt input {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+    color: var(--text-primary) !important;
+    color-scheme: dark !important;
+  }
+  .rp-editbar {
+    background: var(--surface-2) !important;
+    color: var(--text-primary) !important;
+    border-color: var(--border) !important;
+  }
+  .rp-restore {
+    background: var(--surface-3) !important;
+    color: var(--accent) !important;
+    border-color: var(--accent) !important;
+  }
+  .rp-tools {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+  }
+  .rp-sizes {
+    background: var(--surface-3) !important;
+  }
+  .rp-sizes button[aria-pressed="true"] {
+    background: var(--surface) !important;
+    color: var(--accent) !important;
+  }
+  .rp-mini {
+    background: var(--surface-2) !important;
+    border-color: var(--border) !important;
+  }
+  .rp-mini button[aria-pressed="true"] {
+    background: var(--surface-3) !important;
+    color: #fff !important;
+  }
+  .rp-plan-top div {
+    background: var(--surface-2) !important;
+  }
+  .rp-plan-row + .rp-plan-row {
+    border-color: var(--border) !important;
+  }
+  .rp-bar-track {
+    background: var(--surface-3) !important;
+  }
+  .rp-bar--btn:hover,
+  .rp-leg:hover,
+  a.rp-li:hover {
+    background: rgba(255, 255, 255, 0.05) !important;
+  }
 }

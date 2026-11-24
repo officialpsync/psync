@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase";
 import {
   Plus, Trash2, MapPin, Building2, Users, ShieldCheck, ShieldOff,
   MoreHorizontal, ImagePlus, X, Loader2, Settings as SettingsIcon, Palette, Store, Pencil, Phone, Check,
-  AlertTriangle, ChevronRight, Receipt, Mail, Copy,
+  AlertTriangle, ChevronRight, Receipt, Mail, Copy, Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 import { DesignStyles } from "../components/DesignSystem";
@@ -13,7 +13,7 @@ import { cols, Segmented, Skeleton, useToast } from "../components/ui";
 import { Sheet } from "../components/Sheet";
 import {
   type Brand, DEFAULT_BRAND, FONT_OPTIONS, applyBrand, resolveBrand,
-  readCachedBrand, fgFor, isValidHex, emitBrandSaved, emitOrgUpdated,
+  readCachedBrand, cacheBrand, fgFor, isValidHex, emitBrandSaved, emitOrgUpdated, createBrandFromLogo,
 } from "../components/brand";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -173,14 +173,55 @@ export default function SettingsPage() {
       if (uploadError) throw uploadError;
       const { data: { publicUrl } } = supabase.storage.from("org-assets").getPublicUrl(path);
       const urlWithBust = `${publicUrl}?t=${Date.now()}`;
-      await supabase.from("organizations").update({ logo_url: urlWithBust }).eq("id", org.id);
-      setOrg((o) => o ? { ...o, logo_url: urlWithBust } : o);
+
+      // Automatically extract brand colors from logo and generate new default theme
+      const extractedBrand = await createBrandFromLogo(file, brand);
+
+      await supabase.from("organizations").update({
+        logo_url: urlWithBust,
+        brand: extractedBrand,
+        brand_color: extractedBrand.accent,
+      }).eq("id", org.id);
+
+      setOrg((o) => o ? { ...o, logo_url: urlWithBust, brand: extractedBrand, brand_color: extractedBrand.accent } : o);
+      setBrand(extractedBrand);
+      setAccentHex(extractedBrand.accent);
+      setBrandDirty(false);
+      cacheBrand(extractedBrand);
+      applyBrand(extractedBrand);
+      emitBrandSaved(extractedBrand);
       emitOrgUpdated({ logo_url: urlWithBust });
       setLogoPreview(null);
-      show("Logo updated");
+      show("Logo updated & brand theme set as default!");
     } catch {
       setLogoPreview(null);
       show("Upload failed. Try again.", "error");
+    } finally {
+      setUploadingLogo(false);
+    }
+  }
+
+  async function extractThemeFromCurrentLogo() {
+    if (!org?.logo_url) return;
+    setUploadingLogo(true);
+    try {
+      show("Extracting brand colors from logo...");
+      const extractedBrand = await createBrandFromLogo(org.logo_url, brand);
+      await supabase.from("organizations").update({
+        brand: extractedBrand,
+        brand_color: extractedBrand.accent,
+      }).eq("id", org.id);
+
+      setOrg((o) => o ? { ...o, brand: extractedBrand, brand_color: extractedBrand.accent } : o);
+      setBrand(extractedBrand);
+      setAccentHex(extractedBrand.accent);
+      setBrandDirty(false);
+      cacheBrand(extractedBrand);
+      applyBrand(extractedBrand);
+      emitBrandSaved(extractedBrand);
+      show("Brand theme extracted & set as default!");
+    } catch {
+      show("Couldn't extract theme from logo.", "error");
     } finally {
       setUploadingLogo(false);
     }
@@ -371,6 +412,17 @@ export default function SettingsPage() {
                     <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" onClick={() => logoInputRef.current?.click()} disabled={uploadingLogo}>
                       <ImagePlus size={14} />{org.logo_url ? "Change logo" : "Upload logo"}
                     </button>
+                    {org.logo_url && (
+                      <button
+                        type="button"
+                        className="ps-btn ps-btn--secondary ps-btn--sm"
+                        onClick={extractThemeFromCurrentLogo}
+                        disabled={uploadingLogo}
+                        title="Extract dominant brand colors from logo and set as default theme"
+                      >
+                        <Sparkles size={14} /> Extract theme
+                      </button>
+                    )}
                     {org.logo_url && <button type="button" className="ps-btn ps-btn--secondary ps-btn--sm" onClick={removeLogo} disabled={uploadingLogo}><X size={14} /> Remove</button>}
                   </div>
                   <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: "none" }}
@@ -746,14 +798,14 @@ const ST_CSS = `
 .st-progress div { display: flex; flex-direction: column; min-width: 0; }
 .st-progress strong { font-size: 13.5px; } .st-progress small { font-size: 12px; color: var(--text-tertiary); }
 .st-ring { --p: 0; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; background: conic-gradient(var(--accent) calc(var(--p) * 1%), #e8eef8 0); }
-.st-ring b { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #fff; font-size: 11.5px; }
+.st-ring b { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: var(--surface, #fff); color: var(--text-primary); font-size: 11.5px; }
 
 .st-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 16px; align-items: start; }
-.st-nav { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 18px; background: #fff; border: 1px solid var(--st-line); }
+.st-nav { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 4px; padding: 8px; border-radius: 18px; background: var(--surface, #fff); border: 1px solid var(--st-line); }
 .st-nav button { display: flex; align-items: center; gap: 10px; padding: 10px; border: none; border-radius: 12px; background: none; font: inherit; text-align: left; cursor: pointer; }
-.st-nav button:hover { background: #f4f7fc; }
-.st-nav button[aria-current="true"] { background: #eef4ff; }
-.st-nav-icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: #f2f4f8; color: var(--text-secondary); flex-shrink: 0; }
+.st-nav button:hover { background: var(--surface-2, #f4f7fc); }
+.st-nav button[aria-current="true"] { background: var(--accent-dim, #eef4ff); }
+.st-nav-icon { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--surface-2, #f2f4f8); color: var(--text-secondary); flex-shrink: 0; }
 .st-nav button[aria-current="true"] .st-nav-icon { background: linear-gradient(135deg, #0a66d6, #3c4fe0); color: #fff; }
 .st-nav-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
 .st-nav-text b { font-size: 14px; font-weight: 650; color: var(--text-primary); }
@@ -762,16 +814,16 @@ const ST_CSS = `
 .st-nav em { font-style: normal; font-size: 10.5px; font-weight: 750; padding: 2px 7px; border-radius: 8px; background: #fff1de; color: #b45309; }
 
 .st-main { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.st-card { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 14px; background: #fff; border: 1px solid var(--st-line); border-radius: 18px; padding: 18px 20px; }
+.st-card { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 14px; background: var(--surface, #fff); border: 1px solid var(--st-line); border-radius: 18px; padding: 18px 20px; color: var(--text-primary); }
 .st-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, #0a66d6, #3c4fe0); }
 .st-card-h { display: flex; align-items: flex-start; gap: 12px; }
 .st-card-h > div { flex: 1; min-width: 0; }
-.st-card-h h2 { margin: 0; font-size: 16px; font-weight: 700; }
+.st-card-h h2 { margin: 0; font-size: 16px; font-weight: 700; color: var(--text-primary); }
 .st-card-h p { margin: 2px 0 0; font-size: 13px; color: var(--text-tertiary); }
 .st-card-icon { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; flex-shrink: 0; color: #fff; background: linear-gradient(135deg, #0a66d6, #3c4fe0); }
 
 .st-logo { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
-.st-logo-box { width: 84px; height: 84px; border-radius: 18px; overflow: hidden; display: grid; place-items: center; background: #f4f7fc; border: 1.5px dashed #c9d6f2; color: var(--text-tertiary); }
+.st-logo-box { width: 84px; height: 84px; border-radius: 18px; overflow: hidden; display: grid; place-items: center; background: var(--surface-2, #f4f7fc); border: 1.5px dashed var(--border-mid, #c9d6f2); color: var(--text-tertiary); }
 .st-logo-box img { width: 100%; height: 100%; object-fit: cover; }
 .st-logo-acts { display: flex; gap: 8px; flex-wrap: wrap; }
 
@@ -785,58 +837,85 @@ const ST_CSS = `
 .st-field .ps-input[data-invalid="true"] { border-color: #ff3b30; box-shadow: 0 0 0 3px rgba(255,59,48,0.12); }
 .st-field textarea { resize: vertical; }
 
-.st-receipt { position: relative; display: flex; align-items: flex-start; gap: 14px; padding: 16px; border-radius: 14px; border: 1px solid var(--st-line); background: linear-gradient(180deg, #fbfcff, #fff); }
-.st-receipt-logo { width: 52px; height: 52px; border-radius: 12px; overflow: hidden; display: grid; place-items: center; background: #eef4ff; color: var(--accent); flex-shrink: 0; }
+.st-receipt { position: relative; display: flex; align-items: flex-start; gap: 14px; padding: 16px; border-radius: 14px; border: 1px solid var(--st-line); background: var(--surface-2, linear-gradient(180deg, #fbfcff, #fff)); color: var(--text-primary); }
+.st-receipt-logo { width: 52px; height: 52px; border-radius: 12px; overflow: hidden; display: grid; place-items: center; background: var(--surface-3, #eef4ff); color: var(--accent); flex-shrink: 0; }
 .st-receipt-logo img { width: 100%; height: 100%; object-fit: cover; }
 .st-receipt-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.st-receipt-text b { font-size: 16px; } .st-receipt-text small { font-size: 12.5px; color: var(--text-tertiary); }
+.st-receipt-text b { font-size: 16px; color: var(--text-primary); } .st-receipt-text small { font-size: 12.5px; color: var(--text-tertiary); }
 .st-receipt-tag { margin-left: auto; font-size: 11px; font-weight: 800; letter-spacing: 0.1em; color: var(--accent); }
 
-.st-bsec { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid #f0f2f5; }
+.st-bsec { display: flex; flex-direction: column; gap: 10px; padding-top: 14px; border-top: 1px solid var(--st-line, #f0f2f5); }
 .st-bsec-h { display: flex; flex-direction: column; }
-.st-bsec-h b { font-size: 14px; } .st-bsec-h small { font-size: 12.5px; color: var(--text-tertiary); }
+.st-bsec-h b { font-size: 14px; color: var(--text-primary); } .st-bsec-h small { font-size: 12.5px; color: var(--text-tertiary); }
 .st-swatches { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-.st-swatches > button { width: 36px; height: 36px; border-radius: 11px; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--st-line); display: grid; place-items: center; cursor: pointer; }
+.st-swatches > button { width: 36px; height: 36px; border-radius: 11px; border: 2px solid var(--surface, #fff); box-shadow: 0 0 0 1px var(--st-line); display: grid; place-items: center; cursor: pointer; }
 .st-swatches > button[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--text-primary); }
-.st-swatch-custom { position: relative; width: 36px; height: 36px; border-radius: 11px; border: 2px dashed #c4c8d0; display: grid; place-items: center; cursor: pointer; color: var(--text-tertiary); overflow: hidden; }
+.st-swatch-custom { position: relative; width: 36px; height: 36px; border-radius: 11px; border: 2px dashed var(--border-mid, #c4c8d0); display: grid; place-items: center; cursor: pointer; color: var(--text-tertiary); overflow: hidden; }
 .st-swatch-custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
 .st-hex { position: relative; display: inline-flex; align-items: center; margin-left: 4px; }
 .st-hex i { position: absolute; left: 10px; width: 16px; height: 16px; border-radius: 4px; border: 1px solid var(--st-line); }
-.st-hex input { width: 120px; height: 36px; padding: 0 10px 0 32px; border: 1px solid var(--st-line); border-radius: 10px; font-family: monospace; font-size: 13px; outline: none; }
+.st-hex input { width: 120px; height: 36px; padding: 0 10px 0 32px; border: 1px solid var(--st-line); border-radius: 10px; font-family: monospace; font-size: 13px; outline: none; background: var(--surface-2, #fff); color: var(--text-primary); }
 .st-hex input:focus { border-color: var(--accent); }
 .st-opts { display: flex; gap: 8px; flex-wrap: wrap; }
-.st-opts button { height: 36px; padding: 0 16px; border: 1.5px solid var(--st-line); background: #fff; font-size: 13.5px; font-weight: 600; color: var(--text-primary); cursor: pointer; border-radius: 10px; }
+.st-opts button { height: 36px; padding: 0 16px; border: 1.5px solid var(--st-line); background: var(--surface-2, #fff); font-size: 13.5px; font-weight: 600; color: var(--text-primary); cursor: pointer; border-radius: 10px; }
 .st-opts button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
-.st-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 14px; border-top: 1px solid #f0f2f5; flex-wrap: wrap; }
+.st-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding-top: 14px; border-top: 1px solid var(--st-line, #f0f2f5); flex-wrap: wrap; }
 .st-unsaved { margin-right: auto; font-size: 12.5px; font-weight: 650; color: #b45309; }
 
 .st-branches { display: flex; flex-direction: column; gap: 8px; }
-.st-branch { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; border: 1px solid var(--st-line); }
-.st-branch:hover { border-color: #c9d6f2; background: #fafcff; }
+.st-branch { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; border: 1px solid var(--st-line); background: var(--surface, #fff); color: var(--text-primary); }
+.st-branch:hover { border-color: var(--border-mid, #c9d6f2); background: var(--surface-2, #fafcff); }
 .st-branch[data-off="true"] { opacity: 0.6; }
-.st-branch-num { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: #eef4ff; color: var(--accent); font-weight: 750; font-size: 13px; flex-shrink: 0; }
+.st-branch-num { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--surface-2, #eef4ff); color: var(--accent); font-weight: 750; font-size: 13px; flex-shrink: 0; }
 .st-branch-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.st-branch-text b { font-size: 14.5px; }
+.st-branch-text b { font-size: 14.5px; color: var(--text-primary); }
 .st-branch-text small { display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; color: var(--text-tertiary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .st-branch-acts { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .st-icon { width: 32px; height: 32px; border: none; border-radius: 9px; background: none; display: grid; place-items: center; color: var(--text-tertiary); cursor: pointer; text-decoration: none; }
-.st-icon:hover { background: #eef2f8; color: var(--accent); }
-.st-icon--danger:hover { background: #fff0f1; color: #c4001a; }
-.st-pill { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: 14px; border: 1px solid var(--st-line); background: #fff; font: inherit; font-size: 12px; font-weight: 650; color: var(--text-tertiary); cursor: pointer; }
+.st-icon:hover { background: var(--surface-2, #eef2f8); color: var(--accent); }
+.st-icon--danger:hover { background: rgba(255,59,48,0.12); color: #ff453a; }
+.st-pill { display: inline-flex; align-items: center; gap: 5px; height: 28px; padding: 0 10px; border-radius: 14px; border: 1px solid var(--st-line); background: var(--surface-2, #fff); font: inherit; font-size: 12px; font-weight: 650; color: var(--text-secondary); cursor: pointer; }
 .st-pill[data-on="true"] { background: #e6f6ec; border-color: transparent; color: #1f8a3b; }
 .st-empty { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 30px 10px; }
-.st-empty > span { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: #eef4ff; color: var(--accent); }
+.st-empty > span { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; background: var(--surface-2, #eef4ff); color: var(--accent); }
 .st-empty p { margin: 0; font-size: 13px; color: var(--text-tertiary); }
 .st-team-stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
-.st-team-stats div { padding: 10px 12px; border-radius: 12px; background: #f4f7fc; display: flex; flex-direction: column; }
-.st-team-stats small { font-size: 12px; color: var(--text-tertiary); } .st-team-stats b { font-size: 20px; }
+.st-team-stats div { padding: 10px 12px; border-radius: 12px; background: var(--surface-2, #f4f7fc); color: var(--text-primary); display: flex; flex-direction: column; }
+.st-team-stats small { font-size: 12px; color: var(--text-tertiary); } .st-team-stats b { font-size: 20px; color: var(--text-primary); }
 .st-team-link { display: flex; align-items: center; gap: 10px; padding: 14px; border-radius: 14px; color: #fff; text-decoration: none; background: linear-gradient(135deg, #0a66d6, #3c4fe0); }
 .st-team-link span { flex: 1; display: flex; flex-direction: column; }
 .st-team-link small { opacity: 0.85; font-size: 12.5px; }
 
-.st-savebar { position: fixed; left: var(--sb-w, 72px); right: 0; bottom: 0; z-index: 50; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 12px 18px; background: rgba(255,255,255,0.94); border-top: 1px solid var(--st-line); backdrop-filter: blur(16px); }
+.st-savebar { position: fixed; left: var(--sb-w, 72px); right: 0; bottom: 0; z-index: 50; display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 12px 18px; background: var(--surface, rgba(255,255,255,0.94)); border-top: 1px solid var(--st-line); backdrop-filter: blur(16px); }
 .st-savebar span { margin-right: auto; font-size: 13px; font-weight: 600; color: #b45309; }
 .st-savebar .ps-btn { height: 42px; border-radius: 12px; }
+
+html[data-theme="dark"] .st-receipt,
+html.dark .st-receipt {
+  background: var(--surface-2) !important;
+  border-color: var(--border) !important;
+  color: var(--text-primary) !important;
+}
+html[data-theme="dark"] .st-receipt-logo,
+html.dark .st-receipt-logo {
+  background: var(--surface-3) !important;
+  color: var(--accent) !important;
+}
+html[data-theme="dark"] .st-card,
+html.dark .st-card {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+html[data-theme="dark"] .st-nav,
+html.dark .st-nav {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+html[data-theme="dark"] .st-savebar,
+html.dark .st-savebar {
+  background: rgba(20, 23, 31, 0.95) !important;
+  border-color: var(--border) !important;
+}
 
 @media (max-width: 1000px) {
   .st-layout { grid-template-columns: minmax(0, 1fr); }

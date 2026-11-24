@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import clsx from "clsx";
 import { createClient } from "@/lib/supabase";
@@ -8,7 +8,7 @@ import {
   UserPlus, Wallet, UserCheck, BarChart2, ArrowUpRight, ArrowDownRight, Check, ChevronRight,
   ChevronUp, ChevronDown, Users, IndianRupee, CalendarDays, SlidersHorizontal, Sparkles, Activity,
   RotateCcw, ListChecks, PhoneCall, GripVertical, EyeOff, LayoutGrid, Salad, Dumbbell, Ticket,
-  BookOpen, Settings, Target, CalendarClock, Clock, Sun, IndianRupee as RupeeIcon, Receipt,
+  BookOpen, Settings, Target, CalendarClock, Clock, Sun, Moon, LogOut, UsersRound, IndianRupee as RupeeIcon, Receipt,
   TrendingUp, UserPlus2, Gauge, ClipboardCheck,
 } from "lucide-react";
 import {
@@ -25,12 +25,13 @@ import { Skeleton, Avatar } from "./components/ui";
 import { Sheet } from "./components/Sheet";
 import { DesignStyles } from "./components/DesignSystem";
 import { useRole } from "./components/useRole";
+import { getStoredTheme, toggleTheme, THEME_EVENT } from "./components/brand";
 
 /* ───────────────────────── Types ───────────────────────── */
 
 type Stats = {
   // today
-  revenueToday: number; paymentsToday: number; checkinsToday: number; newMembersToday: number;
+  revenueToday: number; paymentsToday: number; checkinsToday: number; checkoutsToday: number; newMembersToday: number;
   newLeadsToday: number; followupsDue: number; followupsOverdue: number; expiringToday: number; classesToday: number;
   // month to date
   revenueMtd: number; revenueMtdPrev: number; paymentsMtd: number;
@@ -38,6 +39,10 @@ type Stats = {
   checkinsMtd: number; checkinsMtdPrev: number;
   leadsMtd: number; leadsMtdPrev: number; conversionsMtd: number;
   activeMembers: number; activeLastMonth: number; expiring7: number;
+  // period breakdown (weekly / monthly)
+  checkinsWeek: number; checkoutsWeek: number; checkoutsMtd: number;
+  paymentsWeek: number; revenueWeek: number;
+  activeStaff: number; classesTotal: number;
 };
 type Point = { label: string; value: number };
 type ExpiringRow = { id: string; end_date: string; members: { id: string; full_name: string } | null; membership_plans: { name: string } | null };
@@ -185,16 +190,29 @@ type Prefs = {
 };
 
 const DEFAULT_PREFS: Prefs = {
-  order: WIDGETS.map((w) => w.id),
-  hidden: [],
-  sizes: {},
+  order: [
+    "turnout",
+    "tasks",
+    "expiring",
+    "revenue",
+    "payments",
+    "today",
+    "mtd",
+    "checkins",
+    "classes",
+    "activity",
+    "actions",
+    "setup",
+  ],
+  hidden: ["today", "mtd", "checkins", "classes", "activity", "actions", "setup"],
+  sizes: { turnout: 4, tasks: 4, expiring: 4, revenue: 8, payments: 4 },
   todayMetrics: ["revenue_today", "checkins_today", "new_members_today", "new_leads_today", "followups_today", "expiring_today"],
   mtdMetrics: ["revenue_mtd", "new_members_mtd", "active_members", "checkins_mtd", "leads_mtd", "renewals_7d"],
   actions: ["add_member", "record_payment", "check_in", "leads"],
   fullNumbers: false,
   revenueMonths: 6,
 };
-const STORAGE_KEY = "psync.dashboard.v2";
+const STORAGE_KEY = "psync.dashboard.v3";
 
 function loadPrefs(): Prefs {
   try {
@@ -210,8 +228,8 @@ function loadPrefs(): Prefs {
     for (const w of WIDGETS) if (!order.includes(w.id)) order.push(w.id);
     return {
       order,
-      hidden: (known(s.hidden, wIds) as WidgetId[] | null) ?? [],
-      sizes: s.sizes ?? {},
+      hidden: (known(s.hidden, wIds) as WidgetId[] | null) ?? [...DEFAULT_PREFS.hidden],
+      sizes: s.sizes ?? { ...DEFAULT_PREFS.sizes },
       todayMetrics: (known(s.todayMetrics, mIds) as MetricId[] | null) ?? DEFAULT_PREFS.todayMetrics,
       mtdMetrics: (known(s.mtdMetrics, mIds) as MetricId[] | null) ?? DEFAULT_PREFS.mtdMetrics,
       actions: ((known(s.actions, aIds) as ActionId[] | null) ?? DEFAULT_PREFS.actions).slice(0, MAX_ACTIONS),
@@ -266,21 +284,47 @@ function Trend({ value }: { value: number | null }) {
   );
 }
 
-function Ring({ pct: p }: { pct: number }) {
-  const r = 52, c = 2 * Math.PI * r;
+function Ring({ count, pct: p, size = 148 }: { count?: number | null; pct: number; size?: number }) {
+  const r = 58;
+  const strokeWidth = 10;
+  const c = 2 * Math.PI * r;
+  const clamped = Math.max(0, Math.min(100, p));
   return (
-    <div className="db-ring" aria-hidden>
-      <svg viewBox="0 0 128 128" width="100%" height="100%">
-        <circle cx="64" cy="64" r={r} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth="12" />
+    <div
+      className="db-ring db-ring--hero"
+      style={{ width: size, height: size }}
+      aria-label={`Check-ins: ${count ?? 0}, turnout: ${Math.round(clamped)}%`}
+    >
+      <svg viewBox="0 0 144 144" width="100%" height="100%">
+        <defs>
+          <linearGradient id="db-ring-grad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#ffffff" stopOpacity={1} />
+            <stop offset="100%" stopColor="#c2e2ff" stopOpacity={0.92} />
+          </linearGradient>
+          <filter id="db-ring-glow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2" stdDeviation="4" floodColor="#ffffff" floodOpacity="0.3" />
+          </filter>
+        </defs>
+        <circle cx="72" cy="72" r={r} fill="none" stroke="rgba(255,255,255,0.18)" strokeWidth={strokeWidth} />
         <circle
-          className="db-ring-arc" cx="64" cy="64" r={r} fill="none" stroke="#fff" strokeWidth="12" strokeLinecap="round"
-          strokeDasharray={c} strokeDashoffset={c * (1 - p / 100)} style={{ opacity: p > 0 ? 1 : 0 }}
-          transform="rotate(-90 64 64)"
+          className="db-ring-arc"
+          cx="72"
+          cy="72"
+          r={r}
+          fill="none"
+          stroke="url(#db-ring-grad)"
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={c * (1 - clamped / 100)}
+          style={{ opacity: clamped > 0 ? 1 : 0 }}
+          transform="rotate(-90 72 72)"
+          filter={clamped > 0 ? "url(#db-ring-glow)" : undefined}
         />
       </svg>
       <div className="db-ring-center">
-        <div className="db-ring-value">{Math.round(p)}%</div>
-        <div className="db-ring-caption">turnout</div>
+        <div className="db-ring-value">{count !== undefined && count !== null ? count : Math.round(p)}</div>
+        <div className="db-ring-caption">{count !== undefined && count !== null ? "check-ins" : "turnout"}</div>
       </div>
     </div>
   );
@@ -439,7 +483,7 @@ type SheetTab = "widgets" | "today" | "mtd" | "actions" | "display";
 export default function DashboardPage() {
   const roleData = useRole();
   // While the role resolves, nothing is visible, so staff never get a flash of owner-only data.
-  const perm: Perms = roleData.loading ? null : (roleData.permissions as Perms);
+  const perm: Perms = roleData.loading ? null : (roleData.permissions as unknown as Perms);
   const isManager = !roleData.loading && (roleData.staff_role === "owner" || roleData.staff_role === "manager");
 
   const [stats, setStats] = useState<Stats | null>(null);
@@ -452,26 +496,62 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState<TaskRow[] | null>(null);
   const [checklist, setChecklist] = useState({ hasPlan: false, hasMember: false, hasBranch: false });
   const [orgName, setOrgName] = useState("");
-  const [greeting, setGreeting] = useState("Welcome back");
-  const [dateLabel, setDateLabel] = useState("");
+  const [greeting, setGreeting] = useState("Hi");
   const [todayName, setTodayName] = useState("");
   const [mtdRange, setMtdRange] = useState({ now: "", prev: "" });
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
   const [editing, setEditing] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [tab, setTab] = useState<SheetTab>("widgets");
+  const [updatePeriod, setUpdatePeriod] = useState<"today" | "weekly" | "monthly">("today");
+  const [expiringDays, setExpiringDays] = useState<7 | 15 | 30>(7);
+  const [paymentPeriod, setPaymentPeriod] = useState<"today" | "weekly" | "monthly">("today");
+  const [checkInDropdownOpen, setCheckInDropdownOpen] = useState(false);
+  const checkInDropdownRef = useRef<HTMLDivElement>(null);
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    if (!checkInDropdownOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (checkInDropdownRef.current && !checkInDropdownRef.current.contains(e.target as Node)) {
+        setCheckInDropdownOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setCheckInDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", onDocClick);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [checkInDropdownOpen]);
+
+  useEffect(() => {
+    setIsDark(getStoredTheme() === "dark");
+    const onTheme = (e: Event) => {
+      const detail = (e as CustomEvent<"light" | "dark">).detail;
+      if (detail) setIsDark(detail === "dark");
+      else setIsDark(getStoredTheme() === "dark");
+    };
+    window.addEventListener(THEME_EVENT, onTheme);
+    return () => window.removeEventListener(THEME_EVENT, onTheme);
+  }, []);
+
+  const handleToggleTheme = () => {
+    const next = toggleTheme();
+    setIsDark(next === "dark");
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  // Client-only values: greeting, dates, saved layout
+  // Client-only values: dates, saved layout
   useEffect(() => {
     const now = new Date();
-    const h = now.getHours();
-    setGreeting(h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening");
-    setDateLabel(now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }));
     setTodayName(DAYS[now.getDay()]);
     const mon = (d: Date) => d.toLocaleDateString("en-IN", { month: "short" });
     const prevMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
@@ -491,12 +571,28 @@ export default function DashboardPage() {
     setPrefs(DEFAULT_PREFS);
     try { localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
   }
-  const resetLayout = () => update({ order: [...DEFAULT_PREFS.order], sizes: {}, hidden: [] });
+  const resetLayout = () => update({ order: [...DEFAULT_PREFS.order], sizes: { ...DEFAULT_PREFS.sizes }, hidden: [...DEFAULT_PREFS.hidden] });
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      let userName = "";
+      const meta = user.user_metadata;
+      if (typeof meta?.name === "string" && meta.name.trim()) {
+        userName = meta.name.trim();
+      } else if (typeof meta?.full_name === "string" && meta.full_name.trim()) {
+        userName = meta.full_name.trim();
+      } else if (typeof meta?.first_name === "string" && meta.first_name.trim()) {
+        userName = meta.first_name.trim();
+      }
+
+      if (userName) {
+        const first = userName.split(/\s+/)[0];
+        setGreeting(`Hi ${first.charAt(0).toUpperCase() + first.slice(1)}`);
+      }
+
       const { data: role } = await supabase.from("user_roles").select("org_id").eq("user_id", user.id).single();
       if (!role) return;
       const oid = role.org_id;
@@ -511,7 +607,9 @@ export default function DashboardPage() {
       const prevSameDay = new Date(now.getFullYear(), now.getMonth() - 1, Math.min(now.getDate(), prevMonthEnd.getDate()), 23, 59, 59);
       const yearStart = new Date(now.getFullYear(), now.getMonth() - 11, 1);
       const weekStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6);
+      const earliest = weekStart < monthStart ? weekStart : monthStart;
       const in7 = isoDay(new Date(Date.now() + 7 * 86400000));
+      const in30 = isoDay(new Date(Date.now() + 30 * 86400000));
       const iso = (d: Date) => d.toISOString();
       const head = { count: "exact" as const, head: true };
       const closed = "(converted,lost)";
@@ -520,7 +618,8 @@ export default function DashboardPage() {
         org, active, lastActive, pay12m, visits7d, expCount, expTodayCount,
         newToday, newMtd, newPrev, ciMtd, ciPrev,
         leadsToday, leadsMtd, leadsPrev, convMtd, fuDue, fuOverdue,
-        plans, membersAll, branches, expList, payList, visitList, classList, fuList,
+        plans, membersAll, branches, expList, payList, visitList, classList, fuList, staffUser,
+        activeStaffCount, activeClassesCount, attendancePeriod,
       ] = await Promise.all([
         supabase.from("organizations").select("name").eq("id", oid).single(),
         supabase.from("memberships").select("*", head).eq("org_id", oid).eq("status", "active"),
@@ -544,9 +643,9 @@ export default function DashboardPage() {
         supabase.from("members").select("*", head).eq("org_id", oid),
         supabase.from("branches").select("*", head).eq("org_id", oid),
         supabase.from("memberships").select("id, end_date, members(id, full_name), membership_plans(name)")
-          .eq("org_id", oid).eq("status", "active").gte("end_date", today).lte("end_date", in7).order("end_date").limit(5),
+          .eq("org_id", oid).eq("status", "active").gte("end_date", today).lte("end_date", in30).order("end_date").limit(30),
         supabase.from("payments").select("id, total_paise, paid_at, method, members(id, full_name)")
-          .eq("org_id", oid).order("paid_at", { ascending: false }).limit(5),
+          .eq("org_id", oid).order("paid_at", { ascending: false }).limit(50),
         supabase.from("attendance_logs").select("id, check_in_at, check_out_at, members(id, full_name)")
           .eq("org_id", oid).order("check_in_at", { ascending: false }).limit(6),
         supabase.from("classes").select("id, name, trainer_name, start_time, duration_mins, color")
@@ -554,9 +653,27 @@ export default function DashboardPage() {
         supabase.from("leads").select("id, full_name, follow_up_at")
           .eq("org_id", oid).not("status", "in", closed).lte("follow_up_at", iso(todayEnd))
           .order("follow_up_at").limit(5),
+        supabase.from("staff").select("name").eq("user_id", user.id).maybeSingle(),
+        supabase.from("staff").select("*", head).eq("org_id", oid).eq("is_active", true),
+        supabase.from("classes").select("*", head).eq("org_id", oid).eq("is_active", true),
+        supabase.from("attendance_logs").select("check_in_at, check_out_at").eq("org_id", oid).gte("check_in_at", iso(earliest)),
       ]);
 
       if (org.data) setOrgName(org.data.name);
+
+      if (!userName) {
+        const staffName = (staffUser?.data as { name?: string } | null)?.name?.trim();
+        if (staffName) {
+          userName = staffName;
+        } else if (user.email) {
+          const local = user.email.split("@")[0].replace(/[._-]+/g, " ").trim();
+          if (local) userName = local;
+        }
+        if (userName) {
+          const first = userName.split(/\s+/)[0];
+          setGreeting(`Hi ${first.charAt(0).toUpperCase() + first.slice(1)}`);
+        }
+      }
 
       // Revenue: 12 monthly buckets, plus today, MTD and the same days last month
       const months: Point[] = [];
@@ -564,16 +681,30 @@ export default function DashboardPage() {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
         months.push({ label: d.toLocaleDateString("en-IN", { month: "short" }), value: 0 });
       }
-      let revenueToday = 0, paymentsToday = 0, revenueMtd = 0, paymentsMtd = 0, revenueMtdPrev = 0;
+      let revenueToday = 0, paymentsToday = 0, revenueWeek = 0, paymentsWeek = 0, revenueMtd = 0, paymentsMtd = 0, revenueMtdPrev = 0;
       (pay12m.data || []).forEach((p: { total_paise: number; paid_at: string }) => {
         const d = new Date(p.paid_at);
         const idx = 11 - ((now.getFullYear() - d.getFullYear()) * 12 + (now.getMonth() - d.getMonth()));
         if (idx >= 0 && idx < 12) months[idx].value += p.total_paise;
         if (d >= todayStart) { revenueToday += p.total_paise; paymentsToday++; }
+        if (d >= weekStart) { revenueWeek += p.total_paise; paymentsWeek++; }
         if (d >= monthStart) { revenueMtd += p.total_paise; paymentsMtd++; }
         else if (d >= prevStart && d <= prevSameDay) revenueMtdPrev += p.total_paise;
       });
       setRevenue(months);
+
+      let ciWeek = 0, coWeek = 0, ciMonth = 0, coMonth = 0, coToday = 0;
+      (attendancePeriod?.data || []).forEach((a: { check_in_at: string; check_out_at: string | null }) => {
+        const inD = new Date(a.check_in_at);
+        if (inD >= weekStart) ciWeek++;
+        if (inD >= monthStart) ciMonth++;
+        if (a.check_out_at) {
+          const outD = new Date(a.check_out_at);
+          if (outD >= todayStart) coToday++;
+          if (outD >= weekStart) coWeek++;
+          if (outD >= monthStart) coMonth++;
+        }
+      });
 
       // Check-ins: last 7 days
       const days: Point[] = [];
@@ -593,6 +724,7 @@ export default function DashboardPage() {
       setStats({
         revenueToday, paymentsToday,
         checkinsToday: days[6].value,
+        checkoutsToday: coToday,
         newMembersToday: newToday.count || 0,
         newLeadsToday: leadsToday.count || 0,
         followupsDue: fuDue.count || 0,
@@ -606,6 +738,13 @@ export default function DashboardPage() {
         conversionsMtd: convMtd.count || 0,
         activeMembers: active.count || 0, activeLastMonth: lastActive.count || 0,
         expiring7: expCount.count || 0,
+        checkinsWeek: ciWeek,
+        checkoutsWeek: coWeek,
+        checkoutsMtd: coMonth,
+        paymentsWeek,
+        revenueWeek,
+        activeStaff: activeStaffCount.count || 0,
+        classesTotal: activeClassesCount.count || classRows.length,
       });
 
       const expRows = (expList.data as unknown as ExpiringRow[]) || [];
@@ -644,6 +783,30 @@ export default function DashboardPage() {
   const revenueSeries = useMemo(() => revenue.slice(12 - prefs.revenueMonths), [revenue, prefs.revenueMonths]);
   const revenueTotal = useMemo(() => revenueSeries.reduce((s, p) => s + p.value, 0), [revenueSeries]);
   const weekTotal = useMemo(() => week.reduce((s, p) => s + p.value, 0), [week]);
+
+  const expiringFiltered = useMemo(() => {
+    if (!expiring) return null;
+    const maxDate = isoDay(new Date(Date.now() + expiringDays * 86400000));
+    return expiring.filter((e) => e.end_date <= maxDate).slice(0, 5);
+  }, [expiring, expiringDays]);
+
+  const paymentsFiltered = useMemo(() => {
+    if (!payments) return null;
+    const now = new Date();
+    const todayStartIso = new Date(now.getFullYear(), now.getMonth(), now.getDate()).toISOString();
+    const weekStartIso = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 6).toISOString();
+    const monthStartIso = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+
+    let list = payments;
+    if (paymentPeriod === "today") {
+      list = payments.filter((p) => p.paid_at >= todayStartIso);
+    } else if (paymentPeriod === "weekly") {
+      list = payments.filter((p) => p.paid_at >= weekStartIso);
+    } else if (paymentPeriod === "monthly") {
+      list = payments.filter((p) => p.paid_at >= monthStartIso);
+    }
+    return list.slice(0, 5);
+  }, [payments, paymentPeriod]);
 
   function metric(id: MetricId): { value: React.ReactNode; foot: React.ReactNode } {
     if (!stats) return { value: <Skeleton w={64} h={22} />, foot: "\u00a0" };
@@ -791,49 +954,237 @@ export default function DashboardPage() {
 
       case "turnout": return (
         <section className="db-hero" aria-label="Today's turnout">
-          <div className="db-hero-glow" aria-hidden />
-          <div className="db-hero-top">
-            <span className="db-hero-label"><Activity size={14} /> Today</span>
-            <span className="db-live"><span className="db-live-dot" />Live</span>
+          <div className="db-hero-bg" aria-hidden>
+            <div className="db-hero-glow" />
           </div>
-          <div className="db-hero-body">
-            <Ring pct={turnout} />
-            <div style={{ minWidth: 0 }}>
-              <div className="db-hero-value">{stats ? <Num v={stats.checkinsToday} full={full} /> : "–"}</div>
+          <div className="db-hero-top">
+            <span className="db-hero-label"><Activity size={14} className="db-activity-pulse" /> Today</span>
+            <span className="db-live db-live--red" title="Live real-time attendance">
+              <span className="db-live-beacon db-live-beacon--red" aria-hidden>
+                <span className="db-live-ping" />
+                <span className="db-live-ping-ring" />
+                <span className="db-live-core" />
+              </span>
+              <span>Live</span>
+            </span>
+          </div>
+          <div className="db-hero-body db-hero-body--vertical">
+            <Ring count={stats ? stats.checkinsToday : null} pct={turnout} size={152} />
+            <div className="db-hero-info">
+              <div className="db-hero-meta-row">
+                <span className="db-hero-pill-pct">{turnout}% Turnout</span>
+                {stats && stats.activeMembers > 0 && (
+                  <span className="db-hero-pill-sub">{stats.checkinsToday} / {fullNum(stats.activeMembers)} active</span>
+                )}
+              </div>
               <div className="db-hero-sub">
                 {!stats ? "\u00a0" : stats.activeMembers > 0
-                  ? `${plural(stats.checkinsToday, "check-in")} of ${fullNum(stats.activeMembers)} active ${plural(stats.activeMembers, "member")}`
+                  ? (stats.checkinsToday === 0
+                      ? "No check-ins recorded yet today"
+                      : `${stats.checkinsToday} visited · ${plural(stats.checkinsToday, "check-in")} recorded today`)
                   : "No active members yet"}
               </div>
             </div>
           </div>
-          <Link href="/dashboard/attendance" className="db-hero-btn">
-            <UserCheck size={15} strokeWidth={2.4} /> Check someone in
-          </Link>
+          <div className="db-hero-action-wrap" ref={checkInDropdownRef}>
+            <button
+              type="button"
+              className="db-hero-btn"
+              onClick={() => setCheckInDropdownOpen((o) => !o)}
+              aria-expanded={checkInDropdownOpen}
+              aria-haspopup="menu"
+            >
+              <UserCheck size={15} strokeWidth={2.4} />
+              <span>Check in</span>
+              <ChevronDown size={14} className={clsx("db-hero-btn-arrow", checkInDropdownOpen && "db-hero-btn-arrow--open")} />
+            </button>
+
+            {checkInDropdownOpen && (
+              <div className="db-checkin-menu" role="menu">
+                <Link
+                  href="/dashboard/attendance"
+                  className="db-checkin-menu-item"
+                  role="menuitem"
+                  onClick={() => setCheckInDropdownOpen(false)}
+                >
+                  <span className="db-checkin-menu-icon db-tone-green">
+                    <Users size={16} strokeWidth={2.4} />
+                  </span>
+                  <div className="db-checkin-menu-text">
+                    <div className="db-checkin-menu-title">Member Check-in</div>
+                    <div className="db-checkin-menu-sub">Record member attendance</div>
+                  </div>
+                  <ChevronRight size={14} className="db-checkin-menu-chev" />
+                </Link>
+
+                <div className="db-checkin-menu-sep" />
+
+                <Link
+                  href="/dashboard/staff"
+                  className="db-checkin-menu-item"
+                  role="menuitem"
+                  onClick={() => setCheckInDropdownOpen(false)}
+                >
+                  <span className="db-checkin-menu-icon db-tone-purple">
+                    <UsersRound size={16} strokeWidth={2.4} />
+                  </span>
+                  <div className="db-checkin-menu-text">
+                    <div className="db-checkin-menu-title">Employee Check-in</div>
+                    <div className="db-checkin-menu-sub">Staff check-in & roster</div>
+                  </div>
+                  <ChevronRight size={14} className="db-checkin-menu-chev" />
+                </Link>
+              </div>
+            )}
+          </div>
         </section>
       );
 
-      case "tasks": return (
-        <section className="db-card db-pad">
-          <CardHead title="Today's updates" sub="Follow-ups and renewals due" href="/dashboard/leads" />
-          {tasks === null ? <RowsSkeleton n={3} /> : tasks.length === 0 ? (
-            <Empty icon={ListChecks} title="All caught up" text="No follow-ups or renewals need attention today." />
-          ) : (
-            <div className="db-rows">
-              {tasks.map((t) => (
-                <Link key={t.id} href={t.href} className={`db-row db-row--link ${t.kind === "followup" ? "db-tone-purple" : "db-tone-amber"}`}>
-                  <span className="db-chip">{t.kind === "followup" ? <PhoneCall size={14} strokeWidth={2.3} /> : <Clock size={14} strokeWidth={2.3} />}</span>
-                  <div className="db-row-text">
-                    <div className="db-row-title">{t.title}</div>
-                    <div className="db-row-sub">{t.sub}</div>
-                  </div>
-                  {t.overdue && <span className="db-pill db-pill--red">Overdue</span>}
-                </Link>
-              ))}
+      case "tasks": {
+        const isToday = updatePeriod === "today";
+        const isWeekly = updatePeriod === "weekly";
+        const isMonthly = updatePeriod === "monthly";
+
+        const curActive = stats?.activeMembers ?? 0;
+        const curCheckins = isToday
+          ? (stats?.checkinsToday ?? 0)
+          : isWeekly
+          ? (stats?.checkinsWeek ?? stats?.checkinsToday ?? 0)
+          : (stats?.checkinsMtd ?? 0);
+
+        const curCheckouts = isToday
+          ? (stats?.checkoutsToday ?? 0)
+          : isWeekly
+          ? (stats?.checkoutsWeek ?? 0)
+          : (stats?.checkoutsMtd ?? 0);
+
+        const curPayCount = isToday
+          ? (stats?.paymentsToday ?? 0)
+          : isWeekly
+          ? (stats?.paymentsWeek ?? 0)
+          : (stats?.paymentsMtd ?? 0);
+
+        const curPayRev = isToday
+          ? (stats?.revenueToday ?? 0)
+          : isWeekly
+          ? (stats?.revenueWeek ?? 0)
+          : (stats?.revenueMtd ?? 0);
+
+        const curClasses = isToday
+          ? (stats?.classesToday ?? 0)
+          : (stats?.classesTotal ?? stats?.classesToday ?? 0);
+
+        const curStaff = stats?.activeStaff ?? 0;
+
+        const subPeriodText = isToday
+          ? "Today's overview & activity"
+          : isWeekly
+          ? "Weekly overview & activity"
+          : "Monthly overview & activity";
+
+        const periodLabel = isToday ? "Today" : isWeekly ? "This week" : "This month";
+
+        return (
+          <section className="db-card db-pad db-updates-card">
+            <div className="db-card-head" style={{ alignItems: "center" }}>
+              <div style={{ minWidth: 0 }}>
+                <h2 className="db-card-title">Today&apos;s updates</h2>
+                <div className="db-card-sub">{subPeriodText}</div>
+              </div>
+              <div className="db-period-toggle" role="group" aria-label="Updates time range">
+                <button
+                  type="button"
+                  className={clsx("db-period-btn", isToday && "active")}
+                  onClick={() => setUpdatePeriod("today")}
+                  aria-pressed={isToday}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  className={clsx("db-period-btn", isWeekly && "active")}
+                  onClick={() => setUpdatePeriod("weekly")}
+                  aria-pressed={isWeekly}
+                >
+                  Weekly
+                </button>
+                <button
+                  type="button"
+                  className={clsx("db-period-btn", isMonthly && "active")}
+                  onClick={() => setUpdatePeriod("monthly")}
+                  aria-pressed={isMonthly}
+                >
+                  Monthly
+                </button>
+              </div>
             </div>
-          )}
-        </section>
-      );
+
+            <div className="db-updates-grid">
+              <Link href="/dashboard/members?filter=active" className="db-update-cell db-tone-blue">
+                <div className="db-update-head">
+                  <span className="db-update-icon"><Users size={15} strokeWidth={2.4} /></span>
+                  <ChevronRight size={13} className="db-update-chev" />
+                </div>
+                <div className="db-update-val">{stats === null ? "-" : fullNum(curActive)}</div>
+                <div className="db-update-lbl">Active members</div>
+                <div className="db-update-sub">Enrolled members</div>
+              </Link>
+
+              <Link href="/dashboard/attendance" className="db-update-cell db-tone-green">
+                <div className="db-update-head">
+                  <span className="db-update-icon"><UserCheck size={15} strokeWidth={2.4} /></span>
+                  <ChevronRight size={13} className="db-update-chev" />
+                </div>
+                <div className="db-update-val">{stats === null ? "-" : fullNum(curCheckins)}</div>
+                <div className="db-update-lbl">Check in</div>
+                <div className="db-update-sub">{periodLabel}</div>
+              </Link>
+
+              <Link href="/dashboard/attendance" className="db-update-cell db-tone-purple">
+                <div className="db-update-head">
+                  <span className="db-update-icon"><LogOut size={15} strokeWidth={2.4} /></span>
+                  <ChevronRight size={13} className="db-update-chev" />
+                </div>
+                <div className="db-update-val">{stats === null ? "-" : fullNum(curCheckouts)}</div>
+                <div className="db-update-lbl">Check out</div>
+                <div className="db-update-sub">{periodLabel}</div>
+              </Link>
+
+              <Link href="/dashboard/payments" className="db-update-cell db-tone-blue">
+                <div className="db-update-head">
+                  <span className="db-update-icon"><Wallet size={15} strokeWidth={2.4} /></span>
+                  <ChevronRight size={13} className="db-update-chev" />
+                </div>
+                <div className="db-update-val">
+                  {stats === null ? "-" : curPayRev > 0 ? `₹${compact(rupees(curPayRev))}` : `${curPayCount}`}
+                </div>
+                <div className="db-update-lbl">Payments</div>
+                <div className="db-update-sub">{stats === null ? "-" : `${fullNum(curPayCount)} ${plural(curPayCount, "paid")}`}</div>
+              </Link>
+
+              <Link href="/dashboard/classes" className="db-update-cell db-tone-green">
+                <div className="db-update-head">
+                  <span className="db-update-icon"><CalendarDays size={15} strokeWidth={2.4} /></span>
+                  <ChevronRight size={13} className="db-update-chev" />
+                </div>
+                <div className="db-update-val">{stats === null ? "-" : fullNum(curClasses)}</div>
+                <div className="db-update-lbl">Classes</div>
+                <div className="db-update-sub">{isToday ? "Scheduled today" : "Active schedules"}</div>
+              </Link>
+
+              <Link href="/dashboard/staff" className="db-update-cell db-tone-purple">
+                <div className="db-update-head">
+                  <span className="db-update-icon"><UsersRound size={15} strokeWidth={2.4} /></span>
+                  <ChevronRight size={13} className="db-update-chev" />
+                </div>
+                <div className="db-update-val">{stats === null ? "-" : fullNum(curStaff)}</div>
+                <div className="db-update-lbl">Employees</div>
+                <div className="db-update-sub">Active staff</div>
+              </Link>
+            </div>
+          </section>
+        );
+      }
 
       case "checkins": return (
         <section className="db-card db-pad">
@@ -856,54 +1207,129 @@ export default function DashboardPage() {
         </section>
       );
 
-      case "expiring": return (
-        <section className="db-card db-pad">
-          <CardHead title="Expiring soon" sub="Renewals due in 7 days" href="/dashboard/members?filter=expiring" />
-          {expiring === null ? <RowsSkeleton /> : expiring.length === 0 ? (
-            <Empty icon={Check} title="All caught up" text="No memberships expire in the next 7 days." />
-          ) : (
-            <div className="db-rows">
-              {expiring.map((e) => {
-                const d = daysUntil(e.end_date);
-                return (
-                  <Link key={e.id} href={e.members ? `/dashboard/members/${e.members.id}` : "/dashboard/members"} className="db-row db-row--link">
-                    <Avatar name={e.members?.full_name ?? "?"} size={34} />
-                    <div className="db-row-text">
-                      <div className="db-row-title">{e.members?.full_name ?? "Member"}</div>
-                      <div className="db-row-sub">{e.membership_plans?.name ?? "Membership"}</div>
-                    </div>
-                    <span className={`db-pill ${d <= 2 ? "db-pill--red" : "db-pill--amber"}`}>
-                      {d <= 0 ? "Today" : d === 1 ? "Tomorrow" : `${d} days`}
-                    </span>
-                  </Link>
-                );
-              })}
+      case "expiring": {
+        const rows = expiringFiltered;
+        return (
+          <section className="db-card db-pad">
+            <div className="db-card-head" style={{ alignItems: "center" }}>
+              <div style={{ minWidth: 0 }}>
+                <h2 className="db-card-title">Expiring soon</h2>
+                <div className="db-card-sub">Renewals due in {expiringDays} days</div>
+              </div>
+              <div className="db-period-toggle" role="group" aria-label="Expiring days range">
+                {([7, 15, 30] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    className={clsx("db-period-btn", expiringDays === d && "active")}
+                    onClick={() => setExpiringDays(d)}
+                    aria-pressed={expiringDays === d}
+                  >
+                    {d} days
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
-        </section>
-      );
+            {rows === null ? <RowsSkeleton /> : rows.length === 0 ? (
+              <Empty icon={Check} title="All caught up" text={`No memberships expire in the next ${expiringDays} days.`} />
+            ) : (
+              <div className="db-rows">
+                {rows.map((e) => {
+                  const d = daysUntil(e.end_date);
+                  return (
+                    <Link
+                      key={e.id}
+                      href={e.members ? `/dashboard/members/${e.members.id}` : "/dashboard/members?filter=expiring"}
+                      className="db-row db-row--link"
+                    >
+                      <Avatar name={e.members?.full_name ?? "?"} size={34} />
+                      <div className="db-row-text">
+                        <div className="db-row-title">{e.members?.full_name ?? "Member"}</div>
+                        <div className="db-row-sub">{e.membership_plans?.name ?? "Membership"}</div>
+                      </div>
+                      <span className={`db-pill ${d <= 2 ? "db-pill--red" : "db-pill--amber"}`}>
+                        {d <= 0 ? "Today" : d === 1 ? "Tomorrow" : `${d} days left`}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        );
+      }
 
-      case "payments": return (
-        <section className="db-card db-pad">
-          <CardHead title="Recent payments" sub="Latest transactions" href="/dashboard/payments" />
-          {payments === null ? <RowsSkeleton /> : payments.length === 0 ? (
-            <Empty icon={Wallet} title="No payments yet" text="Recorded payments will show up here." />
-          ) : (
-            <div className="db-rows">
-              {payments.map((p) => (
-                <div key={p.id} className="db-row">
-                  <span className="db-pay-icon"><IndianRupee size={15} strokeWidth={2.4} /></span>
-                  <div className="db-row-text">
-                    <div className="db-row-title">{p.members?.full_name ?? "Payment"}</div>
-                    <div className="db-row-sub">{p.method ? METHOD[p.method] ?? p.method : "Payment"} · {ago(p.paid_at)}</div>
-                  </div>
-                  <span className="db-amount">+<Num v={p.total_paise} money full={full} /></span>
-                </div>
-              ))}
+      case "payments": {
+        const rows = paymentsFiltered;
+        const subText =
+          paymentPeriod === "today"
+            ? "Transactions today"
+            : paymentPeriod === "weekly"
+            ? "Transactions this week"
+            : "Transactions this month";
+        const emptyText =
+          paymentPeriod === "today"
+            ? "No payments recorded today."
+            : paymentPeriod === "weekly"
+            ? "No payments recorded this week."
+            : "No payments recorded this month.";
+        return (
+          <section className="db-card db-pad">
+            <div className="db-card-head" style={{ alignItems: "center" }}>
+              <div style={{ minWidth: 0 }}>
+                <h2 className="db-card-title">Recent payments</h2>
+                <div className="db-card-sub">{subText}</div>
+              </div>
+              <div className="db-period-toggle" role="group" aria-label="Recent payments range">
+                <button
+                  type="button"
+                  className={clsx("db-period-btn", paymentPeriod === "today" && "active")}
+                  onClick={() => setPaymentPeriod("today")}
+                  aria-pressed={paymentPeriod === "today"}
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  className={clsx("db-period-btn", paymentPeriod === "weekly" && "active")}
+                  onClick={() => setPaymentPeriod("weekly")}
+                  aria-pressed={paymentPeriod === "weekly"}
+                >
+                  Weekly
+                </button>
+                <button
+                  type="button"
+                  className={clsx("db-period-btn", paymentPeriod === "monthly" && "active")}
+                  onClick={() => setPaymentPeriod("monthly")}
+                  aria-pressed={paymentPeriod === "monthly"}
+                >
+                  Monthly
+                </button>
+              </div>
             </div>
-          )}
-        </section>
-      );
+            {rows === null ? <RowsSkeleton /> : rows.length === 0 ? (
+              <Empty icon={Wallet} title="No payments yet" text={emptyText} />
+            ) : (
+              <div className="db-rows">
+                {rows.map((p) => (
+                  <Link
+                    key={p.id}
+                    href={p.members ? `/dashboard/members/${p.members.id}` : "/dashboard/payments"}
+                    className="db-row db-row--link"
+                  >
+                    <span className="db-pay-icon"><IndianRupee size={15} strokeWidth={2.4} /></span>
+                    <div className="db-row-text">
+                      <div className="db-row-title">{p.members?.full_name ?? "Payment"}</div>
+                      <div className="db-row-sub">{p.method ? METHOD[p.method] ?? p.method : "Payment"} · {ago(p.paid_at)}</div>
+                    </div>
+                    <span className="db-amount">+<Num v={p.total_paise} money full={full} /></span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </section>
+        );
+      }
 
       case "actions": return (
         <section className="dz-actions-wrap">
@@ -1023,27 +1449,51 @@ export default function DashboardPage() {
 
       <header className="db-header db-in">
         <div style={{ minWidth: 0 }}>
-          <div className="db-kicker">{dateLabel || "\u00a0"}</div>
           <h1 className="db-title">{greeting}</h1>
-          <p className="db-subtitle">
-            {orgName ? <>Here&apos;s how <strong>{orgName}</strong> is doing today.</> : "Here's how your gym is doing today."}
-          </p>
+          <p className="db-subtitle">Gym Snapshot</p>
         </div>
         <div className="db-header-actions">
+          <Link
+            href="/dashboard/settings"
+            className="db-sub-pill"
+            title="Gym subscription: 35 days left · View subscription & settings"
+            aria-label="Gym subscription: 35 days left"
+          >
+            <span className="db-sub-dot" />
+            <span>35 days left</span>
+          </Link>
+
+          <button
+            type="button"
+            className="ps-btn ps-btn--secondary db-btn-icon"
+            onClick={handleToggleTheme}
+            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {isDark ? <Sun size={15} /> : <Moon size={15} />}
+          </button>
+
           {!editing && (
-            <button type="button" className="ps-btn ps-btn--secondary" onClick={() => openSheet("widgets")}>
-              <SlidersHorizontal size={15} /> <span>Customize</span>
+            <button
+              type="button"
+              className="ps-btn ps-btn--secondary db-btn-icon"
+              onClick={() => openSheet("widgets")}
+              title={`Customize widgets${hiddenCount > 0 ? ` (${hiddenCount} hidden)` : ""}`}
+              aria-label="Customize widgets"
+            >
+              <SlidersHorizontal size={15} />
               {hiddenCount > 0 && <span className="db-count">{hiddenCount}</span>}
             </button>
           )}
           <button
             type="button"
-            className={clsx("ps-btn", editing ? "ps-btn--primary" : "ps-btn--secondary")}
+            className={clsx("ps-btn db-btn-icon", editing ? "ps-btn--primary" : "ps-btn--secondary")}
             aria-pressed={editing}
             onClick={() => setEditing((e) => !e)}
+            title={editing ? "Done editing layout" : "Edit layout"}
+            aria-label={editing ? "Done editing layout" : "Edit layout"}
           >
             {editing ? <Check size={15} strokeWidth={2.6} /> : <LayoutGrid size={15} />}
-            <span>{editing ? "Done" : "Edit layout"}</span>
           </button>
         </div>
       </header>
@@ -1219,19 +1669,489 @@ const OV_CSS = `
 .ov .db-kicker { font-size: 11.5px; margin-bottom: 2px; }
 .ov .db-title { font-size: 24px; }
 .ov .db-subtitle { font-size: 13.5px; margin-top: 2px; }
+.ov .db-header-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .ov .db-header-actions .ps-btn { height: 34px; padding: 0 12px; font-size: 13.5px; }
+.ov .db-header-actions .db-btn-icon {
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative;
+  flex: 0 0 34px !important;
+  border-radius: 9px;
+}
+.ov .db-btn-icon .db-count {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 0 4px;
+  border: 2px solid var(--bg-page, #f5f5f7);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.ov .db-sub-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border-radius: 9px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 550;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  box-shadow: var(--shadow-sm);
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+.ov .db-sub-pill:hover {
+  background: var(--fill, rgba(118, 118, 128, 0.08));
+  color: var(--text-primary);
+  border-color: var(--border-mid);
+  transform: translateY(-1px);
+}
+.ov .db-sub-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #34c759;
+  box-shadow: 0 0 6px rgba(52, 199, 89, 0.6);
+  flex-shrink: 0;
+}
+
+/* Period toggle */
+.ov .db-period-toggle {
+  display: inline-flex;
+  align-items: center;
+  background: var(--fill, rgba(118, 118, 128, 0.1));
+  border-radius: 999px;
+  padding: 3px;
+  border: 1px solid var(--border);
+  gap: 2px;
+}
+.ov .db-period-btn {
+  background: transparent;
+  border: 0;
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-secondary);
+  padding: 4px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 140ms ease;
+  line-height: 1.3;
+}
+.ov .db-period-btn:hover {
+  color: var(--text-primary);
+}
+.ov .db-period-btn.active {
+  background: var(--surface, #ffffff);
+  color: var(--text-primary);
+  font-weight: 650;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+html[data-theme="dark"] .ov .db-period-btn.active,
+html.dark .ov .db-period-btn.active {
+  background: var(--surface-3, #252936);
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+}
+
+/* Updates grid */
+.ov .db-updates-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+@media (max-width: 680px) {
+  .ov .db-updates-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 380px) {
+  .ov .db-updates-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.ov .db-update-cell {
+  display: flex;
+  flex-direction: column;
+  padding: 11px 13px;
+  border-radius: 14px;
+  background: var(--surface-2, #f5f5f7);
+  border: 1px solid var(--border);
+  text-decoration: none;
+  color: inherit;
+  transition: transform 140ms ease, box-shadow 140ms ease, border-color 140ms ease;
+  min-height: 102px;
+}
+.ov .db-update-cell:hover {
+  transform: translateY(-1.5px);
+  border-color: var(--border-mid);
+  box-shadow: var(--shadow-sm);
+}
+.ov .db-update-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.ov .db-update-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--t-dim, rgba(10, 102, 214, 0.1));
+  color: var(--t, var(--accent));
+}
+.ov .db-update-chev {
+  color: var(--text-tertiary);
+  opacity: 0.5;
+  transition: transform 140ms ease, opacity 140ms ease;
+}
+.ov .db-update-cell:hover .db-update-chev {
+  opacity: 1;
+  transform: translateX(2px);
+  color: var(--accent);
+}
+.ov .db-update-val {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+}
+.ov .db-update-lbl {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.ov .db-update-sub {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Eye-catching RED blinking live beacon & hero animations */
+.db-live--red {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6.5px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(220, 38, 38, 0.24);
+  border: 1px solid rgba(255, 69, 58, 0.5);
+  color: #ffffff;
+  backdrop-filter: blur(8px);
+  animation: db-live-red-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+.db-live-beacon--red {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 8px;
+  height: 8px;
+}
+.db-live-beacon--red .db-live-ping {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #ff3b30;
+  opacity: 0.85;
+  animation: db-live-red-radar 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.db-live-beacon--red .db-live-ping-ring {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 1.5px solid #ff3b30;
+  opacity: 0.75;
+  animation: db-live-red-radar 1.6s cubic-bezier(0, 0, 0.2, 1) infinite 0.5s;
+}
+.db-live-beacon--red .db-live-core {
+  position: relative;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff3b30;
+  box-shadow: 0 0 10px #ff3b30, 0 0 16px rgba(255, 59, 48, 0.85);
+}
+
+@keyframes db-live-red-radar {
+  0% { transform: scale(1); opacity: 0.95; }
+  70%, 100% { transform: scale(3.2); opacity: 0; }
+}
+
+@keyframes db-live-red-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.35), 0 0 12px rgba(255, 59, 48, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.2), 0 0 20px rgba(255, 59, 48, 0.7);
+  }
+}
+
+.db-activity-pulse {
+  animation: db-heartbeat 2.4s ease-in-out infinite;
+}
+
+@keyframes db-heartbeat {
+  0%, 100% { transform: scale(1); }
+  10% { transform: scale(1.22); }
+  20% { transform: scale(1); }
+  30% { transform: scale(1.15); }
+  40% { transform: scale(1); }
+}
+
+.ov .db-hero {
+  position: relative;
+  overflow: visible !important;
+  border-radius: var(--db-r-card, 20px);
+  padding: 16px;
+  gap: 12px;
+  transition: transform 180ms ease, box-shadow 180ms ease;
+}
+.ov .db-hero:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 14px 34px -8px rgba(10,102,214,0.55);
+}
+
+.ov .db-hero-bg {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+.ov .db-hero > *:not(.db-hero-bg) {
+  position: relative;
+  z-index: 1;
+}
+
+.ov .db-hero-glow {
+  animation: db-hero-ambient 6s ease-in-out infinite alternate;
+}
+
+@keyframes db-hero-ambient {
+  0% { transform: translate(0, 0) scale(1); opacity: 0.7; }
+  100% { transform: translate(-18px, 12px) scale(1.18); opacity: 0.95; }
+}
+
+.db-ring--hero, .ov .db-ring--hero {
+  transform: none !important;
+  width: 152px !important;
+  height: 152px !important;
+  flex-shrink: 0;
+  margin: 4px auto;
+  position: relative;
+}
+.db-ring--hero .db-ring-value {
+  font-size: 38px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+  line-height: 1;
+}
+.db-ring--hero .db-ring-caption {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.88);
+  margin-top: 4px;
+}
+.ov .db-hero-body, .db-hero-body--vertical {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 12px;
+  position: relative;
+  flex: 1;
+  text-align: center;
+  padding: 6px 0 2px;
+}
+.ov .db-hero.db-span-4 .db-hero-body {
+  justify-content: center !important;
+  align-items: center !important;
+}
+.db-hero-info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+}
+.db-hero-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.db-hero-pill-pct {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11.5px;
+  font-weight: 700;
+  padding: 2.5px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.22);
+  color: #ffffff;
+  letter-spacing: 0.01em;
+  backdrop-filter: blur(4px);
+}
+.db-hero-pill-sub {
+  font-size: 12px;
+  opacity: 0.9;
+  font-weight: 550;
+  color: rgba(255, 255, 255, 0.95);
+}
+.db-hero-sub {
+  font-size: 12.5px;
+  opacity: 0.85;
+  margin-top: 2px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.9);
+  text-align: center;
+}
+
+/* Checkin Dropdown */
+.db-hero-action-wrap {
+  position: relative;
+  width: 100%;
+}
+.ov .db-hero-btn {
+  width: 100%;
+  cursor: pointer;
+  border: none;
+  font-family: inherit;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+.db-hero-btn-arrow {
+  transition: transform 180ms ease;
+  margin-left: 2px;
+}
+.db-hero-btn-arrow--open {
+  transform: rotate(180deg);
+}
+.db-checkin-menu {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  background: var(--surface, #ffffff);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.22), 0 2px 8px rgba(0, 0, 0, 0.08);
+  padding: 6px;
+  z-index: 60;
+  animation: db-menu-pop 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+html[data-theme="dark"] .db-checkin-menu,
+html.dark .db-checkin-menu {
+  background: var(--surface-2, #1c1f2a);
+  border-color: var(--border-strong, rgba(255, 255, 255, 0.14));
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.55);
+}
+@keyframes db-menu-pop {
+  from { opacity: 0; transform: translateY(6px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.db-checkin-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  text-decoration: none;
+  color: var(--text-primary, #1d1d1f);
+  transition: background 120ms ease;
+  cursor: pointer;
+}
+.db-checkin-menu-item:hover {
+  background: var(--fill, rgba(118, 118, 128, 0.08));
+}
+html[data-theme="dark"] .db-checkin-menu-item,
+html.dark .db-checkin-menu-item {
+  color: #ffffff;
+}
+.db-checkin-menu-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+.db-checkin-menu-text {
+  flex: 1;
+  min-width: 0;
+}
+.db-checkin-menu-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+.db-checkin-menu-sub {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  margin-top: 1px;
+}
+.db-checkin-menu-chev {
+  color: var(--text-tertiary);
+  opacity: 0.6;
+  flex-shrink: 0;
+}
+.db-checkin-menu-sep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 6px;
+}
 
 .ov .dz-grid { gap: 12px; margin-bottom: 0; }
 .ov .dz-editbar { margin-bottom: 12px; }
 
 .ov .db-pad { padding: 14px 16px; }
-.ov .db-card-head { margin-bottom: 10px; }
+.ov .db-card-head { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
 .ov .db-card-title { font-size: 15px; }
 .ov .db-chart { height: 200px; }
 .ov .db-chart--sm { height: 170px; }
 
-.ov .db-hero { padding: 16px; gap: 12px; }
+.ov .db-hero { padding: 18px 16px 16px; gap: 12px; }
 .ov .db-ring { transform: scale(0.86); transform-origin: center; }
+.ov .db-ring--hero { transform: none !important; width: 152px !important; height: 152px !important; flex-shrink: 0; }
 
 .ov .db-row { min-height: 44px; padding: 6px 8px; gap: 10px; }
 .ov .db-rows { gap: 0; }
@@ -1250,6 +2170,8 @@ const OV_CSS = `
   .ov .db-header { margin-bottom: 10px; }
   .ov .db-title { font-size: 22px; }
   .ov .db-header-actions .ps-btn { height: 38px; }
+  .ov .db-header-actions .db-btn-icon { width: 38px !important; height: 38px !important; flex: 0 0 38px !important; }
+  .ov .db-sub-pill { height: 38px; }
   .ov .dz-grid { gap: 10px; }
   .ov .dz-cells { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .ov .db-pad { padding: 12px 14px; }
