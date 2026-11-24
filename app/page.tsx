@@ -76,21 +76,29 @@ function Trend({ value }: { value: number }) {
 export default function DashboardPage() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [orgName, setOrgName] = useState("");
-  const [greeting, setGreeting] = useState("Welcome back");
-  const [dateLabel, setDateLabel] = useState("");
+  const [greeting, setGreeting] = useState("Hi");
   const [checklist, setChecklist] = useState({ hasPlan: false, hasMember: false, hasBranch: false });
-
-  useEffect(() => {
-    const now = new Date();
-    const hour = now.getHours();
-    setGreeting(hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening");
-    setDateLabel(now.toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long" }));
-  }, []);
 
   useEffect(() => {
     async function load() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+
+      let userName = "";
+      const meta = user.user_metadata;
+      if (typeof meta?.name === "string" && meta.name.trim()) {
+        userName = meta.name.trim();
+      } else if (typeof meta?.full_name === "string" && meta.full_name.trim()) {
+        userName = meta.full_name.trim();
+      } else if (typeof meta?.first_name === "string" && meta.first_name.trim()) {
+        userName = meta.first_name.trim();
+      }
+
+      if (userName) {
+        const first = userName.split(/\s+/)[0];
+        setGreeting(`Hi ${first.charAt(0).toUpperCase() + first.slice(1)}`);
+      }
+
       const { data: roleData } = await supabase.from("user_roles").select("org_id").eq("user_id", user.id).single();
       if (!roleData) return;
       const oid = roleData.org_id;
@@ -143,6 +151,21 @@ export default function DashboardPage() {
         expiringThisWeek: expiringThisWeek || 0,
       });
       setChecklist({ hasPlan: (plansCount || 0) > 0, hasMember: (membersCount || 0) > 0, hasBranch: (branchCount || 0) > 0 });
+
+      if (!userName) {
+        const { data: staffMember } = await supabase.from("staff").select("name").eq("user_id", user.id).maybeSingle();
+        const staffName = staffMember?.name?.trim();
+        if (staffName) {
+          userName = staffName;
+        } else if (user.email) {
+          const local = user.email.split("@")[0].replace(/[._-]+/g, " ").trim();
+          if (local) userName = local;
+        }
+        if (userName) {
+          const first = userName.split(/\s+/)[0];
+          setGreeting(`Hi ${first.charAt(0).toUpperCase() + first.slice(1)}`);
+        }
+      }
     }
     load();
   }, []);
@@ -163,11 +186,8 @@ export default function DashboardPage() {
       {/* Header */}
       <header className="ps-header">
         <div className="ps-header-text">
-          <div className="ps-kicker">{dateLabel || "\u00a0"}</div>
           <h1 className="ps-title">{greeting}</h1>
-          <p className="ps-subtitle ps-truncate">
-            {orgName ? `Here's how ${orgName} is doing today.` : "Here's how your gym is doing today."}
-          </p>
+          <p className="ps-subtitle ps-truncate">GYM SNAPshot</p>
         </div>
         <div className="ps-header-actions ps-hide-sm">
           <Link href="/dashboard/members/new" className="ps-btn ps-btn--primary">

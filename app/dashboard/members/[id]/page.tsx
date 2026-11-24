@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
-import { BookOpen, Calendar, Camera, ChevronRight, Copy, Dumbbell, Loader2, LogIn, LogOut, Pencil, Plus, QrCode, RefreshCw, Salad, Search, Wallet, UserCheck, X } from "lucide-react";
+import { BookOpen, Calendar, Camera, ChevronRight, Copy, Dumbbell, Loader2, LogIn, LogOut, Pencil, Plus, QrCode, RefreshCw, Salad, Search, Wallet, UserCheck, X, Cake } from "lucide-react";
 import {
   Avatar, BackLink, cols, formatDate, formatINR, formatTime, Segmented, Skeleton, useToast,
 } from "../../components/ui";
@@ -102,14 +102,14 @@ function Tags({ items, tone, none }: { items: string[]; tone?: "red" | "amber"; 
 }
 
 // ---- Renewal Sheet ----
-function RenewalSheet({ member, currentPlan, onClose, onRenewed }: {
+function RenewalSheet({ member, currentPlanId, onClose, onRenewed }: {
   member: Member;
-  currentPlan: RenewalPlan | null;
+  currentPlanId: string | null;
   onClose: () => void;
   onRenewed: () => void;
 }) {
   const [plans, setPlans] = useState<RenewalPlan[]>([]);
-  const [selectedPlanId, setSelectedPlanId] = useState<string>(currentPlan?.id ?? "");
+  const [selectedPlanId, setSelectedPlanId] = useState<string>(currentPlanId ?? "");
   const [startDate, setStartDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [method, setMethod] = useState<Method>("cash");
   const [loading, setLoading] = useState(true);
@@ -122,12 +122,20 @@ function RenewalSheet({ member, currentPlan, onClose, onRenewed }: {
         .select("id, name, duration_days, price_paise, plan_type")
         .eq("org_id", member.org_id)
         .eq("is_active", true)
-        .order("name");
-      setPlans((data as RenewalPlan[]) || []);
+        .order("price_paise");
+      const list = (data as RenewalPlan[]) || [];
+      setPlans(list);
+      if (list.length > 0) {
+        if (!currentPlanId || !list.some((p) => p.id === currentPlanId)) {
+          setSelectedPlanId(list[0].id);
+        } else {
+          setSelectedPlanId(currentPlanId);
+        }
+      }
       setLoading(false);
     }
     load();
-  }, [member.org_id]);
+  }, [member.org_id, currentPlanId]);
 
   const selected = plans.find((p) => p.id === selectedPlanId);
 
@@ -231,19 +239,20 @@ function RenewalSheet({ member, currentPlan, onClose, onRenewed }: {
                   style={{
                     display: "flex", alignItems: "center", justifyContent: "space-between",
                     padding: "12px 14px", borderRadius: 12, width: "100%", textAlign: "left",
-                    border: selectedPlanId === p.id ? "2px solid var(--accent)" : "2px solid transparent",
-                    background: selectedPlanId === p.id ? "var(--accent-dim)" : "var(--fill)",
-                    cursor: "pointer", transition: "border-color 150ms, background 150ms", gap: 12,
+                    border: selectedPlanId === p.id ? "2px solid var(--accent)" : "2px solid var(--border, rgba(0,0,0,0.08))",
+                    background: selectedPlanId === p.id ? "var(--accent-dim, rgba(10,102,214,0.08))" : "var(--surface, #ffffff)",
+                    color: "var(--text-primary)",
+                    cursor: "pointer", transition: "all 140ms ease", gap: 12,
                   }}
                 >
                   <div style={{ minWidth: 0 }}>
-                    <div className="ps-cell-title" style={{ fontSize: 14 }}>{p.name}</div>
-                    <div className="ps-cell-sub">
+                    <div className="ps-cell-title" style={{ fontSize: 14, fontWeight: 650, color: "var(--text-primary)" }}>{p.name}</div>
+                    <div className="ps-cell-sub" style={{ fontSize: 12, color: "var(--text-secondary)", marginTop: 2 }}>
                       {p.duration_days ? `${p.duration_days} days` : "Session-based"}
                     </div>
                   </div>
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-                    <span style={{ fontSize: 15, fontWeight: 650, fontVariantNumeric: "tabular-nums" }}>
+                    <span style={{ fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums", color: selectedPlanId === p.id ? "var(--accent)" : "var(--text-primary)" }}>
                       {formatINR(p.price_paise)}
                     </span>
                     {selectedPlanId === p.id && (
@@ -272,7 +281,7 @@ function RenewalSheet({ member, currentPlan, onClose, onRenewed }: {
                   className="ps-input"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
-                  style={{ height: 40, colorScheme: "light", color: "var(--text-primary)" }}
+                  style={{ height: 40, color: "var(--text-primary)" }}
                 />
               </div>
               <div className="ps-field">
@@ -286,7 +295,7 @@ function RenewalSheet({ member, currentPlan, onClose, onRenewed }: {
                     { value: "cash", label: "Cash" },
                     { value: "upi", label: "UPI" },
                     { value: "card", label: "Card" },
-                    { value: "online", label: "Online" },
+                    // { value: "online", label: "Online" },
                   ]}
                 />
               </div>
@@ -594,6 +603,38 @@ function waLink(phone: string | null, text?: string) {
   const num = d.length === 10 ? `91${d}` : d;
   return `https://wa.me/${num}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
 }
+
+function WhatsAppIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.05 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+    </svg>
+  );
+}
+
+function getBirthdayCountdown(dob: string | null | undefined): { days: number; isUpcoming: boolean; turningAge: number | null } | null {
+  if (!dob) return null;
+  const birth = new Date(dob);
+  if (isNaN(birth.getTime())) return null;
+  const now = new Date();
+  const currentYear = now.getFullYear();
+  const today = new Date(currentYear, now.getMonth(), now.getDate());
+  
+  let nextBday = new Date(currentYear, birth.getMonth(), birth.getDate());
+  if (nextBday < today) {
+    nextBday = new Date(currentYear + 1, birth.getMonth(), birth.getDate());
+  }
+  
+  const diffTime = nextBday.getTime() - today.getTime();
+  const days = Math.round(diffTime / (1000 * 60 * 60 * 24));
+  const turningAge = nextBday.getFullYear() - birth.getFullYear();
+
+  return {
+    days,
+    isUpcoming: days >= 0 && days <= 7,
+    turningAge,
+  };
+}
 function dayKey(d: Date) { return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; }
 function ago(iso: string) {
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
@@ -639,11 +680,11 @@ const WIDGET_LABEL: Record<WidgetId, string> = {
   body: "Body and goals", health: "Health", personal: "Personal", notes: "Notes",
 };
 const DEFAULT_LAYOUT: Layout = {
-  order: ["membership", "body", "attendance", "health", "programs", "personal", "notes"],
+  order: ["programs", "health", "body", "membership", "personal", "attendance", "notes"],
   hidden: [],
-  sizes: { membership: 8, body: 4, attendance: 8, health: 4, programs: 8, personal: 4, notes: 4 },
+  sizes: { programs: 4, health: 4, body: 4, membership: 8, personal: 4, attendance: 8, notes: 12 },
 };
-const LAYOUT_KEY = "psync.member.overview.layout";
+const LAYOUT_KEY = "psync.member.overview.layout.v2";
 const SIZE_LABEL: Record<Span, string> = { 4: "S", 6: "M", 8: "L", 12: "Full" };
 
 function readLayout(): Layout {
@@ -653,7 +694,9 @@ function readLayout(): Layout {
     const known = DEFAULT_LAYOUT.order;
     const order = (raw.order ?? []).filter((w): w is WidgetId => known.includes(w as WidgetId));
     known.forEach((w) => { if (!order.includes(w)) order.push(w); }); // new cards appear at the end
-    return { order, hidden: (raw.hidden ?? []).filter((w) => known.includes(w)), sizes: { ...DEFAULT_LAYOUT.sizes, ...(raw.sizes ?? {}) } };
+    const sizes: Partial<Record<WidgetId, Span>> = { ...DEFAULT_LAYOUT.sizes, ...(raw.sizes ?? {}) };
+    if (sizes.notes === 4) sizes.notes = 12;
+    return { order, hidden: (raw.hidden ?? []).filter((w) => known.includes(w)), sizes };
   } catch { return DEFAULT_LAYOUT; }
 }
 
@@ -836,6 +879,23 @@ export default function MemberProfilePage() {
     return { last30, streak, avg, lastVisit: attendance[0]?.check_in_at ?? null };
   }, [heat, attendance]);
 
+  const daysSinceJoin = useMemo(() => {
+    const joinDate = member?.created_at ? new Date(member.created_at) : new Date();
+    return Math.max(1, Math.min(30, Math.ceil((Date.now() - joinDate.getTime()) / 86400000)));
+  }, [member?.created_at]);
+
+  const isRegular = useMemo(() => {
+    const rawPct = Math.min(100, Math.round((stats.last30 / daysSinceJoin) * 100));
+    const targetExpected = member?.exercise_days_per_week
+      ? Math.max(1, Math.round((daysSinceJoin / 7) * member.exercise_days_per_week))
+      : Math.max(1, Math.round(daysSinceJoin * 0.7));
+    const targetPct = Math.min(100, Math.round((stats.last30 / targetExpected) * 100));
+    const pct = Math.max(rawPct, targetPct);
+    return pct >= 60;
+  }, [stats.last30, daysSinceJoin, member?.exercise_days_per_week]);
+
+  const bday = useMemo(() => getBirthdayCountdown(member?.date_of_birth), [member?.date_of_birth]);
+
   if (notFound) {
     return (
       <div className="ps-page db mp">
@@ -909,11 +969,16 @@ export default function MemberProfilePage() {
   }
 
   const active = memberships.find((ms) => ms.status === "active");
-  const daysLeft = active?.end_date ? Math.ceil((new Date(active.end_date).getTime() - Date.now()) / 86400000) : null;
-  const totalDays = active?.end_date ? Math.max(1, Math.round((new Date(active.end_date).getTime() - new Date(active.start_date).getTime()) / 86400000)) : null;
+  const latest = memberships[0];
+  const currentMembership = active ?? latest;
+  const daysLeft = currentMembership?.end_date ? Math.ceil((new Date(currentMembership.end_date).getTime() - Date.now()) / 86400000) : null;
+  const totalDays = currentMembership?.end_date && currentMembership?.start_date ? Math.max(1, Math.round((new Date(currentMembership.end_date).getTime() - new Date(currentMembership.start_date).getTime()) / 86400000)) : null;
   const used = totalDays && daysLeft !== null ? Math.min(1, Math.max(0, (totalDays - daysLeft) / totalDays)) : 0;
-  const tone: "green" | "amber" | "red" | "grey" = !active ? "grey" : daysLeft === null ? "green" : daysLeft < 0 ? "red" : daysLeft <= 7 ? "amber" : "green";
-  const statusLabel = !active ? "No active plan" : daysLeft === null ? "Active" : daysLeft < 0 ? "Expired" : daysLeft === 0 ? "Ends today" : daysLeft <= 7 ? `${daysLeft}d left` : "Active";
+  const tone: "green" | "amber" | "red" | "grey" = !currentMembership ? "grey" : daysLeft === null ? "green" : daysLeft < 0 ? "red" : daysLeft <= 7 ? "amber" : "green";
+  const statusLabel = !currentMembership ? "No active plan" : daysLeft === null ? "Active" : daysLeft < 0 ? `Expired ${Math.abs(daysLeft)}d ago` : daysLeft === 0 ? "Ends today" : daysLeft <= 7 ? `${daysLeft}d left` : "Active";
+
+  const waChatMsg = `Hi ${first}! How is your workout and fitness routine going? Let us know if you need any assistance!`;
+  const waChatUrl = member?.phone ? waLink(member.phone, waChatMsg) : null;
 
   const bmi = member.height_cm && member.weight_kg ? member.weight_kg / Math.pow(member.height_cm / 100, 2) : null;
   const bmiBand = bmi ? (bmi < 18.5 ? "Under" : bmi < 25 ? "Healthy" : bmi < 30 ? "Over" : "High") : null;
@@ -969,24 +1034,54 @@ export default function MemberProfilePage() {
       <section className="mp-card">
         <div className="mp-card-h">
           <h2><RefreshCw size={15} /> Membership</h2>
-          <button type="button" className="ps-btn ps-btn--tinted ps-btn--sm" onClick={() => setRenewSheetOpen(true)}><RefreshCw size={13} /> {active ? "Renew" : "Add membership"}</button>
+          <button type="button" className="ps-btn ps-btn--tinted ps-btn--sm" onClick={() => setRenewSheetOpen(true)}>
+            <RefreshCw size={13} /> {currentMembership ? "Renew" : "Add membership"}
+          </button>
         </div>
-        {active ? (
+        {currentMembership ? (
           <div className="mp-ms">
             <div className="mp-ms-top">
-              <div><strong>{active.membership_plans?.name ?? "Active plan"}</strong><small>{active.end_date ? `${formatDate(active.start_date)} → ${formatDate(active.end_date, { year: true })}` : `Since ${formatDate(active.start_date)}`}</small></div>
+              <div>
+                <strong>{currentMembership.membership_plans?.name ?? "Membership plan"}</strong>
+                <small>{currentMembership.end_date ? `${formatDate(currentMembership.start_date)} → ${formatDate(currentMembership.end_date, { year: true })}` : `Since ${formatDate(currentMembership.start_date)}`}</small>
+              </div>
               <span className={`mp-status mp-status--${tone} mp-status--soft`}><i />{statusLabel}</span>
             </div>
-            {active.end_date && (
-              <div className="mp-bar" data-tone={tone}><span style={{ width: `${Math.round(used * 100)}%` }} /></div>
+            {currentMembership.end_date && (
+              <div className="mp-bar" data-tone={tone}>
+                <span style={{ width: `${Math.round(daysLeft !== null && daysLeft < 0 ? 100 : used * 100)}%` }} />
+              </div>
             )}
-            {totalDays && daysLeft !== null && <small className="mp-muted">{Math.max(0, totalDays - Math.max(daysLeft, 0))} of {totalDays} days used</small>}
+            <div className="mp-ms-foot">
+              {totalDays && daysLeft !== null && (
+                <small className="mp-muted">
+                  {daysLeft < 0
+                    ? `Expired ${Math.abs(daysLeft)} day${Math.abs(daysLeft) === 1 ? "" : "s"} ago`
+                    : `${Math.max(0, totalDays - Math.max(daysLeft, 0))} of ${totalDays} days used`}
+                </small>
+              )}
+              <button
+                type="button"
+                className="mp-ms-quick-renew"
+                onClick={() => setRenewSheetOpen(true)}
+              >
+                <RefreshCw size={12} />
+                <span>{daysLeft !== null && daysLeft < 0 ? "Renew membership" : "Quick Renew"}</span>
+              </button>
+            </div>
           </div>
-        ) : <p className="mp-muted" style={{ margin: 0 }}>No active membership. Add one to start tracking renewals.</p>}
+        ) : (
+          <div className="mp-ms-empty">
+            <p className="mp-muted" style={{ margin: 0 }}>No membership plan. Add one to start tracking renewals.</p>
+            <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" onClick={() => setRenewSheetOpen(true)}>
+              <Plus size={13} /> Add membership
+            </button>
+          </div>
+        )}
         {memberships.length > 1 && (
           <div className="mp-history">
             <div className="mp-label">History</div>
-            {memberships.filter((m) => m.id !== active?.id).slice(0, 4).map((m) => (
+            {memberships.filter((m) => m.id !== currentMembership?.id).slice(0, 4).map((m) => (
               <div key={m.id} className="mp-hrow">
                 <span>{m.membership_plans?.name ?? "Plan"}</span>
                 <small>{formatDate(m.start_date, { year: true })}{m.end_date ? ` → ${formatDate(m.end_date, { year: true })}` : ""}</small>
@@ -1001,7 +1096,12 @@ export default function MemberProfilePage() {
       <section className="mp-card">
         <div className="mp-card-h">
           <h2><Activity size={15} /> Attendance</h2>
-          <span className="mp-muted">{stats.avg ? `Avg session ${stats.avg < 60 ? `${stats.avg}m` : `${Math.floor(stats.avg / 60)}h ${stats.avg % 60}m`}` : "Last 12 weeks"}</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span className={`mp-att-tag mp-att-tag--${isRegular ? "regular" : "irregular"}`}>
+              <i />{isRegular ? "Regular" : "Irregular"}
+            </span>
+            <span className="mp-muted">{stats.avg ? `Avg session ${stats.avg < 60 ? `${stats.avg}m` : `${Math.floor(stats.avg / 60)}h ${stats.avg % 60}m`}` : "Last 12 weeks"}</span>
+          </div>
         </div>
         <Heatmap days={heat} />
         <div className="mp-heat-legend"><span>Less</span><i data-level="0" /><i data-level="1" /><i data-level="2" /><span>More</span></div>
@@ -1136,24 +1236,57 @@ export default function MemberProfilePage() {
           <div className="mp-hero-id">
             <div className="mp-hero-badges">
               <span className={`mp-status mp-status--${tone}`}><i />{statusLabel}</span>
+              <span
+                className={`mp-att-tag mp-att-tag--${isRegular ? "regular" : "irregular"}`}
+                title={`Attendance: ${isRegular ? "Regular" : "Irregular"}`}
+              >
+                <i />
+                <span>{isRegular ? "Regular" : "Irregular"}</span>
+              </span>
               {openVisit && <span className="mp-live"><i />In gym now</span>}
               {member.primary_goal && <span className="mp-glass-tag"><Target size={12} />{GOAL_LABELS[member.primary_goal] ?? member.primary_goal}</span>}
             </div>
-            <h1>{member.full_name}</h1>
+            <div className="mp-hero-title-row">
+              <h1>{member.full_name}</h1>
+              {waChatUrl && (
+                <a
+                  href={waChatUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mp-wa-icon-btn"
+                  title={`Chat with ${member.full_name} on WhatsApp`}
+                  aria-label={`Chat with ${member.full_name} on WhatsApp`}
+                >
+                  <WhatsAppIcon size={16} />
+                  {/* <span></span> */}
+                </a>
+              )}
+              {bday?.isUpcoming && (
+                <span className="mp-cake-tag" title={`Turns ${bday.turningAge} on ${formatDate(member.date_of_birth)}`}>
+                  <Cake size={14} className="mp-cake-icon" />
+                  <span>{bday.days === 0 ? "Birthday today! 🎉" : bday.days === 1 ? "Birthday tomorrow (1d)" : `Birthday in ${bday.days} days`}</span>
+                </span>
+              )}
+            </div>
             <div className="mp-hero-meta">
-              {member.phone && <span><Phone size={13} />{member.phone}</span>}
-              {member.email && <span><Mail size={13} />{member.email}</span>}
+              {member.phone && (
+                <a href={`tel:${member.phone}`} className="mp-hero-link" title={`Call ${member.phone}`}>
+                  <Phone size={13} />
+                  <span>{member.phone}</span>
+                </a>
+              )}
+              {member.email && (
+                <a href={`mailto:${member.email}`} className="mp-hero-link" title={`Email ${member.email}`}>
+                  <Mail size={13} />
+                  <span>{member.email}</span>
+                </a>
+              )}
               {member.branches?.name && <span><MapPin size={13} />{member.branches.name}</span>}
               <span><CalendarDays size={13} />Member since {formatDate(member.created_at, { year: true })}</span>
             </div>
           </div>
 
           <div className="mp-hero-actions">
-            <div className="mp-quick">
-              {member.phone && <a href={`tel:${member.phone}`} className="mp-round" aria-label="Call" title="Call"><Phone size={16} /></a>}
-              {wa && <a href={wa} target="_blank" rel="noreferrer" className="mp-round" aria-label="WhatsApp" title="WhatsApp"><MessageCircle size={16} /></a>}
-              {member.email && <a href={`mailto:${member.email}`} className="mp-round" aria-label="Email" title="Email"><Mail size={16} /></a>}
-            </div>
             <Link href={`/dashboard/members/${member.id}/edit`} className="mp-glass"><Pencil size={15} /><span>Edit</span></Link>
             <button type="button" className="mp-glass mp-glass--solid mp-hide-sm" onClick={toggleCheckIn} disabled={busy}>
               {busy ? <Loader2 size={15} className="ps-spin" /> : openVisit ? <LogOut size={15} /> : <LogIn size={15} />}
@@ -1174,9 +1307,36 @@ export default function MemberProfilePage() {
         </div>
 
         <div className="mp-stats">
-          <div className="mp-stat">
-            <span className="mp-ring" style={{ "--p": `${Math.round((1 - used) * 100)}` } as React.CSSProperties}><b>{daysLeft === null ? "—" : Math.max(daysLeft, 0)}</b></span>
-            <div><small>Days left</small><strong>{active?.membership_plans?.name ?? "No plan"}</strong></div>
+          <div
+            className="mp-stat mp-stat--renew"
+            onClick={() => setRenewSheetOpen(true)}
+            role="button"
+            tabIndex={0}
+            title="Click to renew membership"
+          >
+            <span
+              className="mp-ring"
+              data-tone={tone}
+              style={{ "--p": `${Math.round(daysLeft !== null && daysLeft < 0 ? 100 : (1 - used) * 100)}` } as React.CSSProperties}
+            >
+              <b>{daysLeft === null ? "—" : daysLeft < 0 ? "!" : daysLeft}</b>
+            </span>
+            <div className="mp-stat-meta" title={currentMembership?.membership_plans?.name ?? "No plan"}>
+              <small>{daysLeft !== null && daysLeft < 0 ? "Expired" : "Days left"}</small>
+              <strong>{currentMembership?.membership_plans?.name ?? "No plan"}</strong>
+            </div>
+            <button
+              type="button"
+              className="mp-stat-renew-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                setRenewSheetOpen(true);
+              }}
+              title="Renew membership plan"
+            >
+              <RefreshCw size={12} />
+              <span>Renew</span>
+            </button>
           </div>
           <div className="mp-stat"><span className="mp-stat-icon"><Activity size={17} /></span><div><small>Visits, 30 days</small><strong>{stats.last30}</strong></div></div>
           <div className="mp-stat"><span className="mp-stat-icon"><Flame size={17} /></span><div><small>Weekly streak</small><strong>{stats.streak} wk{stats.streak === 1 ? "" : "s"}</strong></div></div>
@@ -1229,7 +1389,7 @@ export default function MemberProfilePage() {
             <SortableContext items={shownWidgets} strategy={rectSortingStrategy}>
               <div className="mp-wgrid" data-editing={editing}>
                 {shownWidgets.map((wid) => (
-                  <WTile key={wid} id={wid} span={layout.sizes[wid] ?? DEFAULT_LAYOUT.sizes[wid]} editing={editing}
+                  <WTile key={wid} id={wid} span={(layout.sizes[wid] ?? DEFAULT_LAYOUT.sizes[wid] ?? 12) as Span} editing={editing}
                     onSize={(sz) => saveLayout({ ...layout, sizes: { ...layout.sizes, [wid]: sz } })}
                     onHide={() => saveLayout({ ...layout, hidden: [...layout.hidden, wid] })}>
                     {widgets[wid]}
@@ -1410,7 +1570,7 @@ export default function MemberProfilePage() {
       {renewSheetOpen && (
         <RenewalSheet
           member={member}
-          currentPlan={active?.membership_plans ? { id: active.id, name: active.membership_plans.name, duration_days: active.membership_plans.duration_days, price_paise: 0, plan_type: "duration" } : null}
+          currentPlanId={active?.plan_id ?? active?.membership_plans?.id ?? currentMembership?.plan_id ?? currentMembership?.membership_plans?.id ?? null}
           onClose={() => setRenewSheetOpen(false)}
           onRenewed={async () => { setRenewSheetOpen(false); await reloadMemberships(); show("Membership renewed"); }}
         />
@@ -1477,7 +1637,21 @@ const MP_CSS = `
 .mp-hero-id h1 { margin: 6px 0 6px; font-size: 30px; line-height: 1.1; font-weight: 750; letter-spacing: -0.03em; color: #fff; }
 .mp-hero-badges { display: flex; gap: 6px; flex-wrap: wrap; }
 .mp-hero-meta { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: 13.5px; color: rgba(255,255,255,0.86); }
-.mp-hero-meta span { display: inline-flex; align-items: center; gap: 6px; }
+.mp-hero-meta span, .mp-hero-meta a { display: inline-flex; align-items: center; gap: 6px; }
+.mp-hero-meta a.mp-hero-link {
+  color: #fff;
+  text-decoration: none;
+  cursor: pointer;
+  border-radius: 6px;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  transition: background-color 150ms ease, opacity 150ms ease;
+}
+.mp-hero-meta a.mp-hero-link:hover {
+  background: rgba(255, 255, 255, 0.22);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .mp-status { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 12px; font-size: 12px; font-weight: 650; background: rgba(255,255,255,0.18); color: #fff; backdrop-filter: blur(8px); }
 .mp-status i { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .mp-status--green i { background: #4cd964; } .mp-status--amber i { background: #ffcc00; } .mp-status--red i { background: #ff6b6b; } .mp-status--grey i { background: #d1d1d6; }
@@ -1506,7 +1680,7 @@ const MP_CSS = `
 .mp-menu button:hover, .mp-menu a:hover { background: var(--mp-soft); }
 .mp-menu svg { color: var(--text-tertiary); }
 
-.mp-stats { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
+.mp-stats { display: grid; grid-template-columns: minmax(220px, 1.35fr) repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
 .mp-stat { display: flex; align-items: center; gap: 11px; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); backdrop-filter: blur(10px); min-width: 0; }
 .mp-stat > div { min-width: 0; display: flex; flex-direction: column; }
 .mp-stat small { font-size: 11.5px; font-weight: 650; letter-spacing: 0.04em; text-transform: uppercase; color: rgba(255,255,255,0.75); }
@@ -1514,6 +1688,10 @@ const MP_CSS = `
 .mp-stat-icon { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: rgba(255,255,255,0.18); flex-shrink: 0; }
 .mp-ring { --p: 0; width: 44px; height: 44px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center; background: conic-gradient(#fff calc(var(--p) * 1%), rgba(255,255,255,0.22) 0); }
 .mp-ring b { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; background: #2453c9; }
+.mp-ring[data-tone="red"] { background: conic-gradient(#ff3b30 calc(var(--p) * 1%), rgba(255,255,255,0.22) 0); }
+.mp-ring[data-tone="red"] b { background: #b3261e; }
+.mp-ring[data-tone="amber"] { background: conic-gradient(#ff9f0a calc(var(--p) * 1%), rgba(255,255,255,0.22) 0); }
+.mp-ring[data-tone="amber"] b { background: #b86200; }
 
 /* Alerts */
 .mp-alert { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 14px; padding: 11px 14px; border-radius: 14px; font-size: 13.5px; font-weight: 550; }
@@ -1650,9 +1828,15 @@ a.mp-row:hover { background: var(--mp-soft); }
 
 .mp-bottombar { display: none; }
 
-@media (max-width: 1100px) {
-  .mp-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .mp-overview { grid-template-columns: minmax(0, 1fr); }
+@media (max-width: 1180px) {
+  .mp-stats { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+  .mp-span-8 { grid-column: span 7; }
+  .mp-span-4 { grid-column: span 5; }
+}
+@media (max-width: 960px) {
+  .mp-wgrid { display: flex !important; flex-direction: column !important; gap: 14px !important; }
+  .mp-wgrid > .mp-wtile { grid-column: auto !important; grid-row-end: auto !important; width: 100% !important; }
+  .mp-wsizes { display: none; }
 }
 @media (max-width: 760px) {
   .ps-page.mp { padding: 10px 10px calc(84px + env(safe-area-inset-bottom, 0px)) !important; }
@@ -1665,13 +1849,14 @@ a.mp-row:hover { background: var(--mp-soft); }
   .mp-hero-id { min-width: 0; flex: 1 1 calc(100% - 90px); }
   .mp-hero-id h1 { font-size: 23px; }
   .mp-hero-meta { font-size: 12.5px; gap: 4px 12px; }
-  .mp-hero-meta span:nth-child(n+3) { display: none; }
+  .mp-hero-meta > *:nth-child(n+3) { display: none; }
   .mp-hero-actions { width: 100%; margin-left: 0; }
   .mp-hero-actions .mp-glass:not(.mp-glass--icon) { flex: 1; justify-content: center; }
   .mp-hide-sm { display: none !important; }
   .mp-stats { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; gap: 8px; margin: 14px -16px 0; padding: 0 16px; scrollbar-width: none; }
   .mp-stats::-webkit-scrollbar { display: none; }
   .mp-stat { flex: 0 0 auto; min-width: 150px; scroll-snap-align: start; }
+  .mp-stat.mp-stat--renew { min-width: 230px; }
   .mp-tabs { top: 0; margin: 12px -10px 12px; border-radius: 0; border-left: none; border-right: none; padding: 6px 10px; }
   .mp-tabs button { height: 36px; padding: 0 12px; font-size: 13.5px; }
   .mp-card { padding: 14px; border-radius: 16px; }
@@ -1719,13 +1904,236 @@ a.mp-row:hover { background: var(--mp-soft); }
 .mp-reset { display: inline-flex; align-items: center; gap: 5px; border: none; background: none; font: inherit; font-size: 13px; font-weight: 650; color: var(--accent); cursor: pointer; }
 .mp-tabs-edit { margin-left: auto; flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; height: 38px; padding: 0 12px; border: 1px solid var(--mp-line) !important; border-radius: 10px; background: #fff !important; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--text-secondary) !important; cursor: pointer; box-shadow: none !important; }
 .mp-tabs-edit[data-on="true"] { background: var(--accent) !important; border-color: var(--accent) !important; color: #fff !important; }
-@media (max-width: 1100px) {
-  .mp-span-4 { grid-column: span 6; } .mp-span-8 { grid-column: span 12; }
-}
+
+/* Dark mode for single member profile */
+.dark .mp { --mp-line: var(--border); --mp-soft: var(--surface-2); }
+.dark .mp-card { background: var(--surface-2); border-color: var(--border); color: var(--text-primary); }
+.dark .mp-tabs { background: var(--surface-2) !important; border-color: var(--border) !important; }
+.dark .mp-tabs button { color: var(--text-secondary) !important; }
+.dark .mp-tabs button:hover { color: #fff !important; background: var(--surface-3) !important; }
+.dark .mp-tabs button[aria-selected="true"] { background: var(--accent) !important; color: #fff !important; }
+.dark .mp-tabs button[aria-selected="true"] .mp-count { background: rgba(255, 255, 255, 0.22) !important; color: #fff !important; }
+.dark .mp-tabs-edit { background: var(--surface-2) !important; border-color: var(--border) !important; color: var(--text-primary) !important; }
+.dark .mp-prog { border-color: var(--border) !important; }
+.dark .mp-prog--diet { background: linear-gradient(90deg, rgba(52, 199, 89, 0.12), var(--surface-2) 75%) !important; }
+.dark .mp-prog--workout { background: linear-gradient(90deg, rgba(175, 82, 222, 0.12), var(--surface-2) 75%) !important; }
+.dark .mp-metric { background: var(--surface-3) !important; color: var(--text-primary) !important; }
+.dark .mp-metric strong { color: #fff !important; }
+.dark .mp-metric[data-band="Healthy"] { background: rgba(52, 199, 89, 0.15) !important; }
+.dark .mp-metric[data-band="Healthy"] > span { color: #34c759 !important; }
+.dark .mp-metric[data-band="Over"], .dark .mp-metric[data-band="Under"] { background: rgba(255, 159, 10, 0.15) !important; }
+.dark .mp-metric[data-band="Over"] > span, .dark .mp-metric[data-band="Under"] > span { color: #ff9f0a !important; }
+.dark .mp-metric[data-band="High"] { background: rgba(255, 69, 58, 0.15) !important; }
+.dark .mp-metric[data-band="High"] > span { color: #ff6961 !important; }
+.dark .mp-heat-col span, .dark .mp-heat-legend i { background: var(--surface-3) !important; }
+.dark .mp-heat-col span[data-level="1"], .dark .mp-heat-legend i[data-level="1"] { background: #248a47 !important; }
+.dark .mp-heat-col span[data-level="2"], .dark .mp-heat-legend i[data-level="2"] { background: #34c759 !important; }
+.dark .mp-plan { background: var(--surface-2) !important; border-color: var(--border) !important; color: var(--text-primary) !important; }
+.dark .mp-plan-actions > * { color: var(--text-secondary) !important; }
+.dark .mp-plan-actions > *:hover { background: var(--surface-3) !important; color: #fff !important; }
+.dark .mp-plan-actions > * + * { border-left-color: var(--border) !important; }
+.dark .mp-plan-actions { border-top-color: var(--border) !important; }
+.dark .mp-menu { background: var(--surface-2) !important; border-color: var(--border-mid) !important; }
+.dark .mp-menu button, .dark .mp-menu a { color: var(--text-primary) !important; }
+.dark .mp-menu button:hover, .dark .mp-menu a:hover { background: var(--surface-3) !important; color: #fff !important; }
+.dark .mp-summary > div:not(:first-child) { background: var(--surface-2) !important; border-color: var(--border) !important; }
+.dark .mp-row { border-color: var(--border) !important; }
+.dark .mp-row:hover { background: var(--surface-3) !important; }
+.dark .mp-row-icon { background: var(--surface-3) !important; color: var(--text-secondary) !important; }
+.dark .mp-pill--grey { background: var(--surface-3) !important; color: var(--text-secondary) !important; }
+.dark .mp-bottombar { background: var(--surface-2) !important; border-color: var(--border) !important; }
+.dark .mp-editbar { background: rgba(10, 132, 255, 0.15) !important; color: #58a6ff !important; border: 1px solid rgba(10, 132, 255, 0.3) !important; }
+.dark .mp-restore { background: var(--surface-2) !important; color: #58a6ff !important; border-color: rgba(10, 132, 255, 0.4) !important; }
+.dark .mp-wtools { background: var(--surface-2) !important; border: 1px solid var(--border) !important; }
+.dark .mp-wsizes { background: var(--surface-3) !important; }
+.dark .mp-wsizes button { color: var(--text-secondary) !important; }
+.dark .mp-wsizes button[aria-pressed="true"] { background: var(--surface-2) !important; color: #58a6ff !important; }
 @media (max-width: 760px) {
-  .mp-wgrid { column-gap: 10px; }
-  .mp-wgrid > .mp-wtile { grid-column: span 12; }
   .mp-wsizes { display: none; }
   .mp-tabs-edit { height: 36px; }
+}
+.mp-hero-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.mp-wa-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: #25d366;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 650;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(37, 211, 102, 0.35);
+  transition: all 140ms ease;
+}
+.mp-wa-icon-btn:hover {
+  background: #20bd5a;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37, 211, 102, 0.45);
+}
+.mp-cake-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #ff2d55, #ff375f);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 650;
+  box-shadow: 0 2px 8px rgba(255, 45, 85, 0.35);
+  animation: mp-cake-bounce 2s ease infinite;
+}
+@keyframes mp-cake-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+.mp-cake-icon {
+  flex-shrink: 0;
+}
+.mp-att-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 24px;
+  padding: 0 10px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 650;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  white-space: nowrap;
+}
+.mp-att-tag i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.mp-att-tag--regular, .mp-att-tag--active {
+  background: rgba(52, 199, 89, 0.25);
+  color: #ffffff;
+  border-color: rgba(52, 199, 89, 0.4);
+}
+.mp-att-tag--regular i, .mp-att-tag--active i {
+  background: #34c759;
+  box-shadow: 0 0 6px rgba(52, 199, 89, 0.8);
+}
+.mp-att-tag--irregular, .mp-att-tag--inactive {
+  background: rgba(142, 142, 147, 0.22);
+  color: rgba(255, 255, 255, 0.9);
+  border-color: rgba(142, 142, 147, 0.35);
+}
+.mp-att-tag--irregular i, .mp-att-tag--inactive i {
+  background: #ff9f0a;
+  box-shadow: 0 0 6px rgba(255, 159, 10, 0.8);
+}
+.mp-card .mp-att-tag--regular, .mp-card .mp-att-tag--active {
+  background: #e6f6ec;
+  color: #1f8a3b;
+  border-color: #c3e6cb;
+}
+.mp-card .mp-att-tag--irregular, .mp-card .mp-att-tag--inactive {
+  background: #fff3cd;
+  color: #856404;
+  border-color: #ffeeba;
+}
+.mp-stat--renew {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: transform 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+.mp-stat--renew:hover {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.32);
+}
+.mp-stat-meta {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.mp-stat-meta small {
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.75);
+}
+.mp-stat-meta strong {
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: #ffffff;
+}
+.mp-stat-renew-btn {
+  flex-shrink: 0;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.2);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: all 140ms ease;
+  white-space: nowrap;
+}
+.mp-stat-renew-btn:hover {
+  background: #ffffff;
+  color: #0a66d6;
+  border-color: #ffffff;
+  transform: translateY(-1px);
+}
+.mp-ms-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 4px;
+}
+.mp-ms-quick-renew {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 7px;
+  border: 1px solid var(--accent);
+  background: rgba(10, 102, 214, 0.08);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+.mp-ms-quick-renew:hover {
+  background: var(--accent);
+  color: #ffffff;
+}
+.mp-ms-empty {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 `;

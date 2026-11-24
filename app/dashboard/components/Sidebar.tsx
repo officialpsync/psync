@@ -13,6 +13,7 @@ import {
   LayoutGrid, Users, UserCheck, CalendarDays, Dumbbell, Salad,
   Wallet, Ticket, BarChart2, Settings, LogOut, Menu, ChevronRight, ChevronDown,
   ChefHat, UserPlus, UsersRound, ClipboardList, PanelLeftClose, PanelLeftOpen, Library, Carrot,
+  Pencil, Sun, Moon,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase";
@@ -21,7 +22,9 @@ import { useRole } from "./useRole";
 import { SidebarStyles } from "./DesignSystem";
 import {
   applyBrand, cacheBrand, readCachedBrand, resolveBrand,
-  BRAND_SAVED_EVENT, ORG_UPDATED_EVENT,
+  BRAND_SAVED_EVENT, ORG_UPDATED_EVENT, THEME_EVENT, THEME_KEY,
+  getStoredTheme, applyTheme, toggleTheme, createBrandFromLogo,
+  emitBrandSaved, emitOrgUpdated,
   type Brand, type OrgUpdate,
 } from "./brand";
 
@@ -124,7 +127,7 @@ function roleLabel(role: string) {
    Workspace + brand
    ────────────────────────────────────────────────────────────────────────── */
 
-type Workspace = { name: string; email: string; role: string; logo: string | null };
+type Workspace = { name: string; email: string; role: string; logo: string | null; orgId: string | null };
 
 /**
  * Loads the workspace AND applies the saved theme. The sidebar mounts on every
@@ -135,6 +138,8 @@ function useWorkspace() {
 
   // Apply the last known theme before paint so navigation never flashes defaults.
   useLayoutEffect(() => {
+    const t = getStoredTheme();
+    applyTheme(t);
     const cached = readCachedBrand();
     if (cached) applyBrand(cached);
   }, []);
@@ -153,6 +158,7 @@ function useWorkspace() {
 
       let name = "My gym";
       let logo: string | null = null;
+      const orgId = roleData?.org_id ?? null;
       if (roleData) {
         const { data: org } = await supabase
           .from("organizations")
@@ -172,12 +178,22 @@ function useWorkspace() {
         logo,
         email: user.email ?? "",
         role: roleData?.staff_role ?? roleData?.role ?? "owner",
+        orgId,
       });
     })();
 
     const onBrand = (e: Event) => {
       const b = (e as CustomEvent<Brand>).detail;
       if (b) { applyBrand(b); cacheBrand(b); }
+    };
+    const onTheme = () => {
+      const cached = readCachedBrand();
+      if (cached) applyBrand(cached);
+    };
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === THEME_KEY && (e.newValue === "light" || e.newValue === "dark")) {
+        applyTheme(e.newValue);
+      }
     };
     const onOrg = (e: Event) => {
       const d = (e as CustomEvent<OrgUpdate>).detail;
@@ -190,11 +206,15 @@ function useWorkspace() {
     };
     window.addEventListener(BRAND_SAVED_EVENT, onBrand);
     window.addEventListener(ORG_UPDATED_EVENT, onOrg);
+    window.addEventListener(THEME_EVENT, onTheme);
+    window.addEventListener("storage", onStorage);
 
     return () => {
       alive = false;
       window.removeEventListener(BRAND_SAVED_EVENT, onBrand);
       window.removeEventListener(ORG_UPDATED_EVENT, onOrg);
+      window.removeEventListener(THEME_EVENT, onTheme);
+      window.removeEventListener("storage", onStorage);
     };
   }, []);
 
@@ -303,15 +323,35 @@ function useAutoSidebar() {
    Pieces
    ────────────────────────────────────────────────────────────────────────── */
 
-/** Gym logo, or the gym's initial on the theme chip when there is no logo (or it fails to load). */
-function Mark({ logo, initial }: { logo: string | null; initial: string }) {
+/** Gym logo, or the gym's initial on the theme chip when there is no logo (or it fails to load). Shows pencil badge to indicate it is editable. */
+function Mark({
+  logo,
+  initial,
+  onUploadClick,
+}: {
+  logo: string | null;
+  initial: string;
+  onUploadClick?: (e: React.MouseEvent) => void;
+}) {
   const [failed, setFailed] = useState(false);
   return (
-    <span className="db-sb-mark" aria-hidden>
-      {logo && !failed
-        // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={logo} alt="" onError={() => setFailed(true)} />
-        : initial}
+    <span className="db-sb-mark-wrap" aria-hidden>
+      <span className="db-sb-mark">
+        {logo && !failed
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={logo} alt="" onError={() => setFailed(true)} />
+          : initial}
+      </span>
+      <span
+        className="db-sb-mark-badge"
+        title="Upload logo & match theme"
+        role="button"
+        tabIndex={0}
+        onClick={onUploadClick}
+        style={{ pointerEvents: onUploadClick ? "auto" : undefined, cursor: onUploadClick ? "pointer" : undefined }}
+      >
+        <Pencil size={10.5} strokeWidth={2.4} />
+      </span>
     </span>
   );
 }
@@ -324,6 +364,59 @@ function AppNav() {
   const sb = useAutoSidebar();
   const [moreOpen, setMoreOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isDark, setIsDark] = useState(false);
+
+  useEffect(() => {
+    setIsDark(getStoredTheme() === "dark");
+    const onTheme = (e: Event) => {
+      const detail = (e as CustomEvent<"light" | "dark">).detail;
+      setIsDark((detail || getStoredTheme()) === "dark");
+    };
+    window.addEventListener(THEME_EVENT, onTheme);
+    return () => window.removeEventListener(THEME_EVENT, onTheme);
+  }, []);
+
+  const handleToggleTheme = () => {
+    const next = toggleTheme();
+    setIsDark(next === "dark");
+  };
+
+  const handleMarkUploadClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    fileInputRef.current?.click();
+  };
+
+  const handleLogoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !ws?.orgId) return;
+    try {
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+      const path = `${ws.orgId}/logo.${ext}`;
+      const { error: uploadError } = await supabase.storage
+        .from("org-assets").upload(path, file, { upsert: true, contentType: file.type });
+      if (uploadError) throw uploadError;
+      const { data: { publicUrl } } = supabase.storage.from("org-assets").getPublicUrl(path);
+      const urlWithBust = `${publicUrl}?t=${Date.now()}`;
+
+      const newBrand = await createBrandFromLogo(file);
+      await supabase.from("organizations").update({
+        logo_url: urlWithBust,
+        brand: newBrand,
+        brand_color: newBrand.accent,
+      }).eq("id", ws.orgId);
+
+      applyBrand(newBrand);
+      cacheBrand(newBrand);
+      emitBrandSaved(newBrand);
+      emitOrgUpdated({ logo_url: urlWithBust });
+    } catch (err) {
+      console.error("Sidebar logo update failed:", err);
+    } finally {
+      e.target.value = "";
+    }
+  };
 
   const activeHref = activeHrefFor(pathname);
   const activeGroup = groupKeyFor(activeHref);
@@ -437,6 +530,7 @@ function AppNav() {
   return (
     <>
       <SidebarStyles />
+      <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" style={{ display: "none" }} onChange={handleLogoFileChange} />
 
       {/* ---------- Desktop sidebar: rail → flyout / pinned ---------- */}
       <aside
@@ -450,7 +544,7 @@ function AppNav() {
         <div className="db-sb-inner">
           <div className="db-sb-head">
             <Link href="/dashboard/settings" className="db-sb-brand" aria-label="Gym settings">
-              <Mark key={ws?.logo ?? "none"} logo={ws?.logo ?? null} initial={gymInitial} />
+              <Mark key={ws?.logo ?? "none"} logo={ws?.logo ?? null} initial={gymInitial} onUploadClick={handleMarkUploadClick} />
               <span className="db-sb-id db-sb-fade">
                 {ws ? (
                   <>
@@ -502,6 +596,15 @@ function AppNav() {
             <div className="db-sb-account">
               <span className="db-sb-avatar" aria-hidden>{accountInitial}</span>
               <span className="db-sb-email db-sb-truncate db-sb-fade" title={ws?.email}>{ws?.email}</span>
+              <button
+                type="button"
+                className="db-sb-iconbtn db-sb-fade"
+                onClick={handleToggleTheme}
+                aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+              >
+                {isDark ? <Sun size={15} aria-hidden /> : <Moon size={15} aria-hidden />}
+              </button>
               <button type="button" className="db-sb-iconbtn db-sb-fade" onClick={signOut} aria-label="Sign out" title="Sign out">
                 <LogOut size={16} aria-hidden />
               </button>
@@ -513,14 +616,25 @@ function AppNav() {
       {/* ---------- Phone / tablet top bar ---------- */}
       <header className="ps-topbar db-sb-top" data-scrolled={scrolled}>
         <Link href="/dashboard" className="db-sb-top-brand">
-          <Mark key={ws?.logo ?? "none"} logo={ws?.logo ?? null} initial={gymInitial} />
+          <Mark key={ws?.logo ?? "none"} logo={ws?.logo ?? null} initial={gymInitial} onUploadClick={handleMarkUploadClick} />
           <span className="db-sb-top-name db-sb-truncate">{ws?.name ?? "\u00a0"}</span>
         </Link>
-        {showSettings && (
-          <Link href={SETTINGS.href} className="db-sb-iconbtn" aria-label="Settings">
-            <Settings size={19} aria-hidden />
-          </Link>
-        )}
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <button
+            type="button"
+            className="db-sb-iconbtn"
+            onClick={handleToggleTheme}
+            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {isDark ? <Sun size={17} aria-hidden /> : <Moon size={17} aria-hidden />}
+          </button>
+          {showSettings && (
+            <Link href={SETTINGS.href} className="db-sb-iconbtn" aria-label="Settings">
+              <Settings size={19} aria-hidden />
+            </Link>
+          )}
+        </div>
       </header>
 
       {/* ---------- Phone / tablet tab bar ---------- */}
@@ -565,6 +679,12 @@ function AppNav() {
             <ul className="db-sb-group-list">
               {showStaff && sheetRow(STAFF)}
               {showSettings && sheetRow(SETTINGS)}
+              <li>
+                <button type="button" className="db-sb-row" onClick={handleToggleTheme}>
+                  {isDark ? <Sun size={20} className="db-sb-row-icon" aria-hidden /> : <Moon size={20} className="db-sb-row-icon" aria-hidden />}
+                  <span>{isDark ? "Light mode" : "Dark mode"}</span>
+                </button>
+              </li>
               <li>
                 <button type="button" className="db-sb-row db-sb-row--danger" onClick={signOut}>
                   <LogOut size={20} aria-hidden />

@@ -293,22 +293,22 @@ export default function DietPlansPage() {
 // NOTE: no backticks inside this CSS.
 const DL_CSS = `
 .dl-sep { width: 1px; height: 22px; background: var(--dt-line); flex: 0 0 auto; margin: 0 4px; }
-.dl-card { position: relative; background: #fff; border: 1px solid var(--dt-line); border-radius: 18px; overflow: visible; }
-.dl-tr { position: relative; display: grid; grid-template-columns: minmax(200px, 2fr) minmax(130px, 1.1fr) minmax(170px, 1.4fr) 120px 110px 100px; align-items: center; gap: 14px; padding: 0 16px; min-height: 62px; border-bottom: 1px solid #eef0f3; }
-.dl-th { min-height: 40px; background: #f6f8fb; border-radius: 18px 18px 0 0; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-tertiary); }
+.dl-card { position: relative; background: var(--surface, #fff); border: 1px solid var(--dt-line); border-radius: 18px; overflow: visible; color: var(--text-primary); }
+.dl-tr { position: relative; display: grid; grid-template-columns: minmax(200px, 2fr) minmax(130px, 1.1fr) minmax(170px, 1.4fr) 120px 110px 100px; align-items: center; gap: 14px; padding: 0 16px; min-height: 62px; border-bottom: 1px solid var(--dt-line, #eef0f3); }
+.dl-th { min-height: 40px; background: var(--surface-2, #f6f8fb); border-radius: 18px 18px 0 0; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-secondary); }
 .dl-row { transition: background 120ms; }
-.dl-row:hover { background: #f7faff; }
+.dl-row:hover { background: var(--fill, rgba(255, 255, 255, 0.04)); }
 .dl-row[data-older="true"] { opacity: 0.7; }
 .dl-cover { position: absolute; inset: 0; z-index: 0; }
 .dl-row > *:not(.dl-cover) { position: relative; z-index: 1; pointer-events: none; }
 .dl-row .dl-actions, .dl-row .dl-actions * { pointer-events: auto; }
 .dl-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .dl-text { display: flex; flex-direction: column; min-width: 0; }
-.dl-text strong { font-size: 14.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dl-text strong { font-size: 14.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
 .dl-text small, .dl-sched small { font-size: 12.5px; color: var(--text-tertiary); display: inline-flex; align-items: center; gap: 4px; }
 .dl-mode { align-self: flex-start; padding: 2px 9px; border-radius: 7px; background: var(--accent-dim, #e8f1ff); color: var(--accent); font-size: 12.5px; font-weight: 650; }
 .dl-sched { display: flex; flex-direction: column; gap: 5px; font-size: 13px; color: var(--text-secondary); min-width: 0; }
-.dl-prog { position: relative; display: block; height: 16px; border-radius: 8px; background: #eef2f8; overflow: hidden; }
+.dl-prog { position: relative; display: block; height: 16px; border-radius: 8px; background: var(--surface-2, #eef2f8); overflow: hidden; }
 .dl-prog i { position: absolute; inset: 0 auto 0 0; border-radius: 8px; background: linear-gradient(90deg, #0a66d6, #3c4fe0); }
 .dl-prog em { position: relative; display: block; font-style: normal; font-size: 10.5px; font-weight: 700; line-height: 16px; padding-left: 8px; color: #fff; text-shadow: 0 0 2px rgba(0,0,0,0.25); }
 .dl-kcal { font-size: 13px; color: var(--text-tertiary); white-space: nowrap; }
@@ -319,12 +319,12 @@ const DL_CSS = `
 .dl-pill--blue { background: #e8f1ff; color: #0a66d6; } .dl-pill--grey { background: #f0f0f3; color: #6e6e73; }
 .dl-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; }
 .dl-icon { width: 32px; height: 32px; border: none; border-radius: 9px; background: none; display: grid; place-items: center; color: var(--text-tertiary); cursor: pointer; text-decoration: none; }
-.dl-icon:hover { background: #eef2f8; color: var(--accent); }
+.dl-icon:hover { background: var(--surface-2, #eef2f8); color: var(--accent); }
 .dl-chev { color: var(--text-tertiary); }
 .dl-menu-anchor { position: relative; }
-.dl-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 190px; padding: 5px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px rgba(15,23,42,0.06), 0 16px 36px -10px rgba(15,23,42,0.3); display: flex; flex-direction: column; }
+.dl-menu { position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; min-width: 190px; padding: 5px; border-radius: 12px; background: var(--surface, #fff); border: 1px solid var(--border); box-shadow: var(--shadow-md, 0 16px 36px -10px rgba(15,23,42,0.3)); display: flex; flex-direction: column; }
 .dl-menu button, .dl-menu a { display: flex; align-items: center; gap: 9px; padding: 9px 10px; border: none; background: none; border-radius: 8px; font: inherit; font-size: 13.5px; color: var(--text-primary); text-decoration: none; cursor: pointer; text-align: left; }
-.dl-menu button:hover, .dl-menu a:hover { background: #f4f7fc; }
+.dl-menu button:hover, .dl-menu a:hover { background: var(--surface-2, #f4f7fc); }
 .dl-menu svg { color: var(--text-tertiary); }
 .dl-foot { padding: 10px 16px; font-size: 12.5px; color: var(--text-tertiary); }
 .dl-show-sm { display: none !important; }
@@ -335,5 +335,29 @@ const DL_CSS = `
   .dl-show-sm { display: inline-flex !important; }
   .dl-chev { display: none; }
   .dl-menu { position: fixed; left: 10px; right: 10px; top: auto; bottom: calc(var(--tabbar-h, 0px) + 12px); }
+}
+
+html[data-theme="dark"] .dl-card, html.dark .dl-card {
+  background: var(--surface) !important;
+  border-color: var(--border) !important;
+}
+html[data-theme="dark"] .dl-th, html.dark .dl-th {
+  background: var(--surface-2) !important;
+  border-color: var(--border) !important;
+  color: var(--text-secondary) !important;
+}
+html[data-theme="dark"] .dl-tr, html.dark .dl-tr {
+  border-bottom: 1px solid var(--border) !important;
+}
+html[data-theme="dark"] .dl-row:hover, html.dark .dl-row:hover {
+  background: rgba(255, 255, 255, 0.04) !important;
+}
+html[data-theme="dark"] .dl-menu, html.dark .dl-menu {
+  background: var(--surface-2) !important;
+  border-color: var(--border) !important;
+}
+html[data-theme="dark"] .dl-menu button:hover, html[data-theme="dark"] .dl-menu a:hover,
+html.dark .dl-menu button:hover, html.dark .dl-menu a:hover {
+  background: var(--surface-3) !important;
 }
 `

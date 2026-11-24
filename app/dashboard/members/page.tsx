@@ -8,8 +8,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
-  Plus, Search, X, SlidersHorizontal, ChevronRight, ChevronLeft, Copy, Check, Salad, Dumbbell,
-  Download, Bookmark, Trash2, ArrowUpDown, Users,
+  Plus, Search, X, SlidersHorizontal, ChevronRight, ChevronLeft, ChevronDown, Copy, Check, Salad, Dumbbell,
+  Download, Bookmark, Trash2, ArrowUpDown, Users, Loader2, Tag,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { Avatar, Skeleton, useToast, formatDate } from "../components/ui";
@@ -20,15 +20,54 @@ const supabase = createClient();
 
 // ── Data ─────────────────────────────────────────────────────────────────────
 
-type Membership = { status: string; end_date: string; membership_plans: { name: string } | null };
+const TAG_GROUPS = [
+  { group: "Blood sugar", key: "blood_sugar", items: ["Type 2 Diabetes", "Pre-Diabetes", "Insulin Resistance"] },
+  { group: "Hormonal", key: "hormonal", items: ["PCOS", "Hypothyroidism", "Hyperthyroidism"] },
+  { group: "Heart", key: "heart", items: ["Hypertension", "High Cholesterol", "Dyslipidemia"] },
+  { group: "Digestive", key: "digestive", items: ["GERD", "Acid Reflux", "IBS", "Constipation"] },
+  { group: "Liver", key: "liver", items: ["NAFLD", "Fatty Liver"] },
+  { group: "Kidney", key: "kidney", items: ["Chronic Kidney Disease", "CKD"] },
+  { group: "Other", key: "other", items: ["Celiac Disease"] },
+  { group: "Gut symptoms", key: "gut_symptoms", items: ["Bloating", "Acidity", "Heartburn", "Constipation", "Gas"] },
+  { group: "Food intolerances", key: "food_intolerances", items: ["Lactose", "Gluten", "Fructose", "Soy"] },
+];
+
+const asList = (v: string[] | string | null | undefined): string[] =>
+  !v ? [] : Array.isArray(v) ? v : v.split(",").map((s) => s.trim()).filter(Boolean);
+
+function memberAllTags(m: MemberRaw): string[] {
+  const list: string[] = [
+    ...asList(m.medical_conditions),
+    ...asList(m.gut_symptoms),
+    ...asList(m.food_intolerances),
+  ];
+  const seen = new Set<string>();
+  const res: string[] = [];
+  for (const item of list) {
+    const k = item.trim().toLowerCase();
+    if (k && !seen.has(k)) {
+      seen.add(k);
+      res.push(item.trim());
+    }
+  }
+  return res;
+}
+
+type Membership = { id?: string; status: string; end_date: string; membership_plans: { name: string; duration_days?: number | null } | null };
 type MemberRaw = {
   id: string; full_name: string; phone: string | null; email: string | null; sex: string | null;
-  date_of_birth: string | null; created_at: string; memberships: Membership[];
+  date_of_birth: string | null; created_at: string;
+  medical_conditions?: string[] | string | null;
+  gut_symptoms?: string[] | string | null;
+  food_intolerances?: string[] | string | null;
+  primary_goal?: string | null;
+  diet_type?: string | null;
+  memberships: Membership[];
 };
 type StatusKey = "active" | "expiring" | "expired" | "none";
 type Member = MemberRaw & {
-  status: StatusKey; plan: string | null; endDate: string | null; daysLeft: number | null; age: number | null;
-  hasDiet: boolean; hasWorkout: boolean;
+  status: StatusKey; plan: string | null; planDurationDays: number | null; endDate: string | null; daysLeft: number | null; age: number | null;
+  hasDiet: boolean; hasWorkout: boolean; allTags: string[];
 };
 
 function enrich(m: MemberRaw, diet: Set<string>, workout: Set<string>): Member {
@@ -43,8 +82,8 @@ function enrich(m: MemberRaw, diet: Set<string>, workout: Set<string>): Member {
   }
   const age = m.date_of_birth ? Math.floor((Date.now() - new Date(m.date_of_birth).getTime()) / 31557600000) : null;
   return {
-    ...m, status, daysLeft, age, plan: latest?.membership_plans?.name ?? null, endDate: latest?.end_date ?? null,
-    hasDiet: diet.has(m.id), hasWorkout: workout.has(m.id),
+    ...m, status, daysLeft, age, plan: latest?.membership_plans?.name ?? null, planDurationDays: latest?.membership_plans?.duration_days ?? null, endDate: latest?.end_date ?? null,
+    hasDiet: diet.has(m.id), hasWorkout: workout.has(m.id), allTags: memberAllTags(m),
   };
 }
 
@@ -61,18 +100,22 @@ type Tab = "all" | StatusKey;
 type YesNo = "any" | "yes" | "no";
 type Filters = {
   plans: string[]; gender: string[]; ageMin: string; ageMax: string;
-  joined: "any" | "7" | "30" | "90" | "month" | "custom"; joinedFrom: string; joinedTo: string;
+  cycle: "any" | "monthly" | "yearly";
+  joined: "any" | "7" | "30" | "90" | "month" | "year" | "custom"; joinedFrom: string; joinedTo: string;
   ends: "any" | "7" | "15" | "30" | "past";
   diet: YesNo; workout: YesNo; birthday: boolean; missing: boolean;
+  tags: string[];
+  tagMatch: "any" | "all";
 };
 const NO_FILTERS: Filters = {
-  plans: [], gender: [], ageMin: "", ageMax: "", joined: "any", joinedFrom: "", joinedTo: "",
+  plans: [], gender: [], ageMin: "", ageMax: "", cycle: "any", joined: "any", joinedFrom: "", joinedTo: "",
   ends: "any", diet: "any", workout: "any", birthday: false, missing: false,
+  tags: [], tagMatch: "any",
 };
 type View = { id: string; name: string; tab: Tab; filters: Filters };
 type SortKey = "newest" | "oldest" | "name" | "ending";
 
-const JOINED_LABEL = { any: "Any time", "7": "Last 7 days", "30": "Last 30 days", "90": "Last 3 months", month: "This month", custom: "Custom" } as const;
+const JOINED_LABEL = { any: "Any time", "7": "Last 7 days", "30": "Last 30 days", "90": "Last 3 months", month: "This month", year: "This year", custom: "Custom" } as const;
 const ENDS_LABEL = { any: "Any", "7": "Next 7 days", "15": "Next 15 days", "30": "Next 30 days", past: "Already ended" } as const;
 const SORT_LABEL: Record<SortKey, string> = { newest: "Newest first", oldest: "Oldest first", name: "Name A–Z", ending: "Plan ending soonest" };
 
@@ -80,12 +123,25 @@ function day0(d = new Date()) { const x = new Date(d); x.setHours(0, 0, 0, 0); r
 
 function matches(m: Member, f: Filters): boolean {
   if (f.plans.length && !f.plans.includes(m.plan ?? "__none")) return false;
-  if (f.gender.length && !f.gender.includes((m.sex ?? "").toLowerCase() || "__none")) return false;
+  if (f.gender.length) {
+    const s = (m.sex ?? "").toLowerCase().trim();
+    const gKey = (s === "male" || s === "m") ? "male" : (s === "female" || s === "f") ? "female" : "__none";
+    if (!f.gender.includes(gKey)) return false;
+  }
+  if (f.cycle !== "any") {
+    const d = m.planDurationDays;
+    const n = (m.plan ?? "").toLowerCase();
+    const isYearly = (d !== null && d >= 300) || n.includes("year") || n.includes("annual") || n.includes("12 month") || n.includes("12m") || n.includes("365");
+    const isMonthly = (d !== null && d >= 20 && d <= 60) || n.includes("month") || n.includes("1m") || n.includes("30 day");
+    if (f.cycle === "yearly" && !isYearly) return false;
+    if (f.cycle === "monthly" && !isMonthly) return false;
+  }
   if (f.ageMin && (m.age === null || m.age < Number(f.ageMin))) return false;
   if (f.ageMax && (m.age === null || m.age > Number(f.ageMax))) return false;
   if (f.joined !== "any") {
     const j = day0(new Date(m.created_at)); const t = day0();
     if (f.joined === "month" && (j.getMonth() !== t.getMonth() || j.getFullYear() !== t.getFullYear())) return false;
+    if (f.joined === "year" && j.getFullYear() !== t.getFullYear()) return false;
     if (["7", "30", "90"].includes(f.joined) && j < new Date(t.getTime() - Number(f.joined) * 86400000)) return false;
     if (f.joined === "custom") {
       if (f.joinedFrom && j < day0(new Date(`${f.joinedFrom}T00:00:00`))) return false;
@@ -100,13 +156,26 @@ function matches(m: Member, f: Filters): boolean {
   if (f.workout !== "any" && m.hasWorkout !== (f.workout === "yes")) return false;
   if (f.birthday && (!m.date_of_birth || new Date(m.date_of_birth).getMonth() !== new Date().getMonth())) return false;
   if (f.missing && m.phone && m.email) return false;
+  if (f.tags && f.tags.length > 0) {
+    const memberTagSet = new Set(m.allTags.map((t) => t.toLowerCase()));
+    if (f.tagMatch === "all") {
+      if (!f.tags.every((t) => memberTagSet.has(t.toLowerCase()))) return false;
+    } else {
+      if (!f.tags.some((t) => memberTagSet.has(t.toLowerCase()))) return false;
+    }
+  }
   return true;
 }
 
 function chipsOf(f: Filters): { key: string; label: string; clear: Partial<Filters> }[] {
   const c: { key: string; label: string; clear: Partial<Filters> }[] = [];
   if (f.plans.length) c.push({ key: "plans", label: `Plan: ${f.plans.map((p) => (p === "__none" ? "None" : p)).join(", ")}`, clear: { plans: [] } });
-  if (f.gender.length) c.push({ key: "gender", label: `Gender: ${f.gender.map((g) => (g === "__none" ? "Not set" : cap(g))).join(", ")}`, clear: { gender: [] } });
+  if (f.cycle !== "any") c.push({ key: "cycle", label: `Duration: ${f.cycle === "monthly" ? "Monthly" : "Yearly"}`, clear: { cycle: "any" } });
+  if (f.gender.length) c.push({
+    key: "gender",
+    label: `Gender: ${f.gender.map((g) => (g === "male" ? "Male" : g === "female" ? "Female" : "Not set")).join(", ")}`,
+    clear: { gender: [] }
+  });
   if (f.ageMin || f.ageMax) c.push({ key: "age", label: `Age: ${f.ageMin || "any"}–${f.ageMax || "any"}`, clear: { ageMin: "", ageMax: "" } });
   if (f.joined !== "any") c.push({
     key: "joined",
@@ -118,6 +187,15 @@ function chipsOf(f: Filters): { key: string; label: string; clear: Partial<Filte
   if (f.workout !== "any") c.push({ key: "workout", label: f.workout === "yes" ? "Has workout" : "No workout", clear: { workout: "any" } });
   if (f.birthday) c.push({ key: "birthday", label: "Birthday this month", clear: { birthday: false } });
   if (f.missing) c.push({ key: "missing", label: "Missing phone or email", clear: { missing: false } });
+  if (f.tags && f.tags.length > 0) {
+    f.tags.forEach((tag) => {
+      c.push({
+        key: `tag-${tag}`,
+        label: `Tag: ${tag}`,
+        clear: { tags: f.tags.filter((t) => t.toLowerCase() !== tag.toLowerCase()) },
+      });
+    });
+  }
   return c;
 }
 function cap(s: string) { return s ? s[0].toUpperCase() + s.slice(1) : s; }
@@ -128,81 +206,407 @@ function Opt({ on, onClick, children }: { on: boolean; onClick: () => void; chil
   return <button type="button" className="mb-opt" data-on={on} onClick={onClick}>{on && <Check size={12} strokeWidth={3} />}{children}</button>;
 }
 
-function FilterPanel({ f, set, plans, genders, count, onClear, onClose }: {
-  f: Filters; set: (p: Partial<Filters>) => void; plans: string[]; genders: string[]; count: number; onClear: () => void; onClose: () => void;
+function TagFilterCards({
+  selected,
+  onChange,
+  searchQuery = "",
+}: {
+  selected: string[];
+  onChange: (tags: string[]) => void;
+  searchQuery?: string;
 }) {
-  const toggle = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+  const q = searchQuery.trim().toLowerCase();
+  const toggle = (item: string) => {
+    const norm = item.toLowerCase();
+    const exists = selected.some((s) => s.toLowerCase() === norm);
+    if (exists) {
+      onChange(selected.filter((s) => s.toLowerCase() !== norm));
+    } else {
+      onChange([...selected, item]);
+    }
+  };
+
+  const visibleGroups = useMemo(() => {
+    if (!q) return TAG_GROUPS;
+    return TAG_GROUPS.map((g) => {
+      const matchGroup = g.group.toLowerCase().includes(q);
+      const matchingItems = g.items.filter((item) => matchGroup || item.toLowerCase().includes(q));
+      return matchingItems.length > 0 ? { ...g, items: matchingItems } : null;
+    }).filter(Boolean) as typeof TAG_GROUPS;
+  }, [q]);
+
+  if (visibleGroups.length === 0) {
+    return (
+      <div className="mb-empty" style={{ padding: "30px 10px" }}>
+        <p style={{ margin: 0, fontSize: 13 }}>No tags match &ldquo;{searchQuery}&rdquo;</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="mb-pop" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Filters">
+    <div className="mb-tag-grid">
+      {visibleGroups.map((g) => (
+        <div key={g.key} className="mb-tag-card">
+          <div className="mb-tag-card-title">{g.group.toUpperCase()}</div>
+          <div className="mb-tag-card-chips">
+            {g.items.map((item) => {
+              const on = selected.some((s) => s.toLowerCase() === item.toLowerCase());
+              return (
+                <button
+                  key={item}
+                  type="button"
+                  className="mb-tag-pill"
+                  data-selected={on}
+                  onClick={() => toggle(item)}
+                  aria-pressed={on}
+                >
+                  {on && <Check size={12} strokeWidth={2.8} style={{ marginRight: 4 }} />}
+                  {item}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function TagsPanel({
+  f,
+  set,
+  count,
+  onClear,
+  onClose,
+  onExport,
+}: {
+  f: Filters;
+  set: (p: Partial<Filters>) => void;
+  count: number;
+  onClear: () => void;
+  onClose: () => void;
+  onExport: () => void;
+}) {
+  const [tagSearch, setTagSearch] = useState("");
+  return (
+    <div className="mb-pop mb-pop--wide" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Tags filter">
       <div className="mb-pop-head">
-        <strong>Filters</strong>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <strong>Filter by Tags</strong>
+          {f.tags.length > 0 && <span className="mb-badge">{f.tags.length}</span>}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="mb-seg mb-seg--sm" style={{ width: 140 }}>
+            <button
+              type="button"
+              data-on={f.tagMatch === "any"}
+              onClick={() => set({ tagMatch: "any" })}
+              title="Match members having ANY of the selected tags"
+            >
+              Any tag
+            </button>
+            <button
+              type="button"
+              data-on={f.tagMatch === "all"}
+              onClick={() => set({ tagMatch: "all" })}
+              title="Match members having ALL selected tags"
+            >
+              All tags
+            </button>
+          </div>
+          <button type="button" className="mb-icon" onClick={onClose} aria-label="Close"><X size={15} /></button>
+        </div>
+      </div>
+
+      <div style={{ padding: "0 14px 10px" }}>
+        <div className="mb-search mb-search--block">
+          <Search size={14} />
+          <input
+            type="search"
+            value={tagSearch}
+            onChange={(e) => setTagSearch(e.target.value)}
+            placeholder="Search tags (e.g. PCOS, Diabetes, Bloating, Lactose)..."
+            aria-label="Search health tags"
+          />
+          {tagSearch && (
+            <button type="button" className="mb-x" onClick={() => setTagSearch("")} aria-label="Clear tag search">
+              <X size={12} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="mb-pop-body mb-pop-body--tags">
+        <TagFilterCards
+          selected={f.tags}
+          onChange={(next) => set({ tags: next })}
+          searchQuery={tagSearch}
+        />
+      </div>
+
+      <div className="mb-pop-foot">
+        <button
+          type="button"
+          className="ps-btn ps-btn--secondary ps-btn--sm"
+          onClick={onClear}
+          disabled={f.tags.length === 0}
+        >
+          Reset tags
+        </button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            type="button"
+            className="ps-btn ps-btn--secondary ps-btn--sm"
+            onClick={() => {
+              onExport();
+              onClose();
+            }}
+            disabled={count === 0}
+            title="Export filtered members as CSV"
+          >
+            <Download size={14} /> Export ({count})
+          </button>
+          <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" onClick={onClose}>
+            Show {count} member{count === 1 ? "" : "s"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FilterPanel({ f, set, plans, count, onClear, onClose, onExport }: {
+  f: Filters; set: (p: Partial<Filters>) => void; plans: string[]; count: number; onClear: () => void; onClose: () => void; onExport: () => void;
+}) {
+  const [filterTab, setFilterTab] = useState<"general" | "tags">("general");
+  const [tagSearch, setTagSearch] = useState("");
+  const toggle = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
+
+  return (
+    <div className={`mb-pop ${filterTab === "tags" ? "mb-pop--wide" : ""}`} onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Filters">
+      <div className="mb-pop-head">
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <strong>Filters</strong>
+          <div className="mb-seg mb-seg--sm" style={{ width: 170 }}>
+            <button
+              type="button"
+              data-on={filterTab === "general"}
+              onClick={() => setFilterTab("general")}
+            >
+              General
+            </button>
+            <button
+              type="button"
+              data-on={filterTab === "tags"}
+              onClick={() => setFilterTab("tags")}
+            >
+              Tags {f.tags.length > 0 ? `(${f.tags.length})` : ""}
+            </button>
+          </div>
+        </div>
         <button type="button" className="mb-icon" onClick={onClose} aria-label="Close"><X size={15} /></button>
       </div>
-      <div className="mb-pop-body">
-        <section>
-          <h4>Membership plan</h4>
-          <div className="mb-opts">
-            {[...plans, "__none"].map((p) => <Opt key={p} on={f.plans.includes(p)} onClick={() => set({ plans: toggle(f.plans, p) })}>{p === "__none" ? "No plan" : p}</Opt>)}
-          </div>
-        </section>
-        <section>
-          <h4>Plan ends</h4>
-          <div className="mb-opts">
-            {(Object.keys(ENDS_LABEL) as Filters["ends"][]).map((k) => <Opt key={k} on={f.ends === k} onClick={() => set({ ends: k })}>{ENDS_LABEL[k]}</Opt>)}
-          </div>
-        </section>
-        <section>
-          <h4>Joined</h4>
-          <div className="mb-opts">
-            {(Object.keys(JOINED_LABEL) as Filters["joined"][]).map((k) => <Opt key={k} on={f.joined === k} onClick={() => set({ joined: k })}>{JOINED_LABEL[k]}</Opt>)}
-          </div>
-          {f.joined === "custom" && (
-            <div className="mb-range">
-              <input type="date" className="mb-input" value={f.joinedFrom} onChange={(e) => set({ joinedFrom: e.target.value })} aria-label="Joined from" />
-              <span>to</span>
-              <input type="date" className="mb-input" value={f.joinedTo} onChange={(e) => set({ joinedTo: e.target.value })} aria-label="Joined to" />
+
+      {filterTab === "general" ? (
+        <div className="mb-pop-body">
+          <section className="mb-filter-export-banner">
+            <div>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Export filtered list</div>
+              <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
+                {count} member{count === 1 ? "" : "s"} match current filters
+              </div>
             </div>
-          )}
-        </section>
-        <div className="mb-two">
-          <section>
-            <h4>Diet plan</h4>
-            <div className="mb-seg">
-              {(["any", "yes", "no"] as YesNo[]).map((v) => <button key={v} type="button" data-on={f.diet === v} onClick={() => set({ diet: v })}>{v === "any" ? "Any" : v === "yes" ? "Has" : "None"}</button>)}
-            </div>
+            <button
+              type="button"
+              className="ps-btn ps-btn--secondary ps-btn--sm"
+              onClick={() => {
+                onExport();
+                onClose();
+              }}
+              disabled={count === 0}
+            >
+              <Download size={13} /> Export CSV
+            </button>
           </section>
+
           <section>
-            <h4>Workout</h4>
-            <div className="mb-seg">
-              {(["any", "yes", "no"] as YesNo[]).map((v) => <button key={v} type="button" data-on={f.workout === v} onClick={() => set({ workout: v })}>{v === "any" ? "Any" : v === "yes" ? "Has" : "None"}</button>)}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 7 }}>
+              <h4>Health & Medical Tags</h4>
+              <button
+                type="button"
+                className="mb-link"
+                style={{ fontSize: 12, padding: 0 }}
+                onClick={() => setFilterTab("tags")}
+              >
+                View all categories &rarr;
+              </button>
             </div>
-          </section>
-        </div>
-        <div className="mb-two">
-          <section>
-            <h4>Gender</h4>
             <div className="mb-opts">
-              {[...genders, "__none"].map((g) => <Opt key={g} on={f.gender.includes(g)} onClick={() => set({ gender: toggle(f.gender, g) })}>{g === "__none" ? "Not set" : cap(g)}</Opt>)}
+              {["PCOS", "Type 2 Diabetes", "Hypertension", "GERD", "Bloating", "Lactose"].map((t) => {
+                const on = f.tags.some((x) => x.toLowerCase() === t.toLowerCase());
+                return (
+                  <Opt
+                    key={t}
+                    on={on}
+                    onClick={() => {
+                      const next = on
+                        ? f.tags.filter((x) => x.toLowerCase() !== t.toLowerCase())
+                        : [...f.tags, t];
+                      set({ tags: next });
+                    }}
+                  >
+                    {t}
+                  </Opt>
+                );
+              })}
+            </div>
+          </section>
+
+          <section>
+            <h4>Membership plan</h4>
+            <div className="mb-opts">
+              {[...plans, "__none"].map((p) => <Opt key={p} on={f.plans.includes(p)} onClick={() => set({ plans: toggle(f.plans, p) })}>{p === "__none" ? "No plan" : p}</Opt>)}
             </div>
           </section>
           <section>
-            <h4>Age</h4>
-            <div className="mb-range">
-              <input type="number" min={0} className="mb-input" placeholder="Min" value={f.ageMin} onChange={(e) => set({ ageMin: e.target.value })} />
-              <span>to</span>
-              <input type="number" min={0} className="mb-input" placeholder="Max" value={f.ageMax} onChange={(e) => set({ ageMax: e.target.value })} />
+            <h4>Membership duration</h4>
+            <div className="mb-seg">
+              {(["any", "monthly", "yearly"] as const).map((c) => (
+                <button key={c} type="button" data-on={f.cycle === c} onClick={() => set({ cycle: c })}>
+                  {c === "any" ? "Any" : c === "monthly" ? "Monthly" : "Yearly"}
+                </button>
+              ))}
             </div>
           </section>
+          <section>
+            <h4>Plan ends</h4>
+            <div className="mb-opts">
+              {(Object.keys(ENDS_LABEL) as Filters["ends"][]).map((k) => <Opt key={k} on={f.ends === k} onClick={() => set({ ends: k })}>{ENDS_LABEL[k]}</Opt>)}
+            </div>
+          </section>
+          <section>
+            <h4>Joined</h4>
+            <div className="mb-opts">
+              {(Object.keys(JOINED_LABEL) as Filters["joined"][]).map((k) => <Opt key={k} on={f.joined === k} onClick={() => set({ joined: k })}>{JOINED_LABEL[k]}</Opt>)}
+            </div>
+            {f.joined === "custom" && (
+              <div className="mb-range">
+                <input type="date" className="mb-input" value={f.joinedFrom} onChange={(e) => set({ joinedFrom: e.target.value })} aria-label="Joined from" />
+                <span>to</span>
+                <input type="date" className="mb-input" value={f.joinedTo} onChange={(e) => set({ joinedTo: e.target.value })} aria-label="Joined to" />
+              </div>
+            )}
+          </section>
+          <div className="mb-two">
+            <section>
+              <h4>Diet plan</h4>
+              <div className="mb-seg">
+                {(["any", "yes", "no"] as YesNo[]).map((v) => <button key={v} type="button" data-on={f.diet === v} onClick={() => set({ diet: v })}>{v === "any" ? "Any" : v === "yes" ? "Has" : "None"}</button>)}
+              </div>
+            </section>
+            <section>
+              <h4>Workout</h4>
+              <div className="mb-seg">
+                {(["any", "yes", "no"] as YesNo[]).map((v) => <button key={v} type="button" data-on={f.workout === v} onClick={() => set({ workout: v })}>{v === "any" ? "Any" : v === "yes" ? "Has" : "None"}</button>)}
+              </div>
+            </section>
+          </div>
+          <div className="mb-two">
+            <section>
+              <h4>Gender</h4>
+              <div className="mb-opts">
+                {[
+                  { id: "male", label: "Male" },
+                  { id: "female", label: "Female" },
+                  { id: "__none", label: "Not set" },
+                ].map((g) => (
+                  <Opt key={g.id} on={f.gender.includes(g.id)} onClick={() => set({ gender: toggle(f.gender, g.id) })}>
+                    {g.label}
+                  </Opt>
+                ))}
+              </div>
+            </section>
+            <section>
+              <h4>Age</h4>
+              <div className="mb-range">
+                <input type="number" min={0} className="mb-input" placeholder="Min" value={f.ageMin} onChange={(e) => set({ ageMin: e.target.value })} />
+                <span>to</span>
+                <input type="number" min={0} className="mb-input" placeholder="Max" value={f.ageMax} onChange={(e) => set({ ageMax: e.target.value })} />
+              </div>
+            </section>
+          </div>
+          <section>
+            <h4>More</h4>
+            <label className="mb-check"><input type="checkbox" checked={f.birthday} onChange={(e) => set({ birthday: e.target.checked })} /> Birthday this month</label>
+            <label className="mb-check"><input type="checkbox" checked={f.missing} onChange={(e) => set({ missing: e.target.checked })} /> Missing phone or email</label>
+          </section>
         </div>
-        <section>
-          <h4>More</h4>
-          <label className="mb-check"><input type="checkbox" checked={f.birthday} onChange={(e) => set({ birthday: e.target.checked })} /> Birthday this month</label>
-          <label className="mb-check"><input type="checkbox" checked={f.missing} onChange={(e) => set({ missing: e.target.checked })} /> Missing phone or email</label>
-        </section>
-      </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+          <div style={{ padding: "0 14px 10px", display: "flex", alignItems: "center", gap: 10 }}>
+            <div className="mb-search mb-search--block">
+              <Search size={14} />
+              <input
+                type="search"
+                value={tagSearch}
+                onChange={(e) => setTagSearch(e.target.value)}
+                placeholder="Search tags (e.g. PCOS, Diabetes, Bloating)..."
+                aria-label="Search health tags"
+              />
+              {tagSearch && (
+                <button type="button" className="mb-x" onClick={() => setTagSearch("")} aria-label="Clear tag search">
+                  <X size={12} />
+                </button>
+              )}
+            </div>
+            <div className="mb-seg mb-seg--sm" style={{ width: 140, flexShrink: 0 }}>
+              <button
+                type="button"
+                data-on={f.tagMatch === "any"}
+                onClick={() => set({ tagMatch: "any" })}
+                title="Match members having ANY of the selected tags"
+              >
+                Any tag
+              </button>
+              <button
+                type="button"
+                data-on={f.tagMatch === "all"}
+                onClick={() => set({ tagMatch: "all" })}
+                title="Match members having ALL selected tags"
+              >
+                All tags
+              </button>
+            </div>
+          </div>
+          <div className="mb-pop-body mb-pop-body--tags">
+            <TagFilterCards
+              selected={f.tags}
+              onChange={(next) => set({ tags: next })}
+              searchQuery={tagSearch}
+            />
+          </div>
+        </div>
+      )}
+
       <div className="mb-pop-foot">
         <button type="button" className="ps-btn ps-btn--secondary ps-btn--sm" onClick={onClear}>Reset</button>
-        <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" onClick={onClose}>Show {count} member{count === 1 ? "" : "s"}</button>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button
+            type="button"
+            className="ps-btn ps-btn--secondary ps-btn--sm"
+            onClick={() => {
+              onExport();
+              onClose();
+            }}
+            disabled={count === 0}
+            title="Export filtered members as CSV"
+          >
+            <Download size={14} /> Export ({count})
+          </button>
+          <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" onClick={onClose}>
+            Show {count} member{count === 1 ? "" : "s"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -225,13 +629,17 @@ export default function MembersPage() {
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sort, setSort] = useState<SortKey>("newest");
-  const [panel, setPanel] = useState<"filters" | "sort" | "views" | null>(null);
+  const [panel, setPanel] = useState<"filters" | "tags" | "sort" | "views" | null>(null);
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [exportIncludeTags, setExportIncludeTags] = useState(true);
   const [views, setViews] = useState<View[]>([]);
   const [viewId, setViewId] = useState<string | null>(null);
   const [naming, setNaming] = useState(false);
   const [viewName, setViewName] = useState("");
   const [page, setPage] = useState(0);
   const [copySource, setCopySource] = useState<Member | null>(null);
+  const [statusMenuId, setStatusMenuId] = useState<string | null>(null);
+  const [changingStatusId, setChangingStatusId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
   const PAGE = 25;
 
@@ -243,7 +651,7 @@ export default function MembersPage() {
     setOrgId(role.org_id); setUserId(user.id);
     const [mRes, dRes, wRes, v] = await Promise.all([
       supabase.from("members")
-        .select("id, full_name, phone, email, sex, date_of_birth, created_at, memberships(status, end_date, membership_plans(name))")
+        .select("id, full_name, phone, email, sex, date_of_birth, created_at, medical_conditions, gut_symptoms, food_intolerances, primary_goal, diet_type, memberships(id, status, end_date, membership_plans(name, duration_days))")
         .eq("org_id", role.org_id).order("created_at", { ascending: false }),
       supabase.from("member_diet_plans").select("member_id").eq("org_id", role.org_id).eq("status", "active"),
       supabase.from("member_workout_programs").select("member_id").eq("org_id", role.org_id).eq("status", "active"),
@@ -251,17 +659,64 @@ export default function MembersPage() {
     ]);
     const diet = new Set((dRes.data ?? []).map((r: { member_id: string }) => r.member_id));
     const wk = new Set((wRes.data ?? []).map((r: { member_id: string }) => r.member_id));
-    setMembers(((mRes.data ?? []) as MemberRaw[]).map((m) => enrich(m, diet, wk)));
+    setMembers(((mRes.data ?? []) as unknown as MemberRaw[]).map((m) => enrich(m, diet, wk)));
     if (Array.isArray(v)) setViews(v);
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  useEffect(() => {
+    if (!statusMenuId) return;
+    const close = () => setStatusMenuId(null);
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") setStatusMenuId(null); };
+    window.addEventListener("click", close);
+    window.addEventListener("keydown", key);
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", key);
+    };
+  }, [statusMenuId]);
+
+  async function handleQuickStatusChange(m: Member, newStatus: "active" | "inactive") {
+    setChangingStatusId(m.id);
+    setStatusMenuId(null);
+    try {
+      if (newStatus === "inactive") {
+        await Promise.all([
+          supabase.from("members").update({ status: "inactive" }).eq("id", m.id),
+          supabase.from("memberships").update({ status: "expired" }).eq("member_id", m.id).eq("status", "active"),
+        ]);
+        show(`${m.full_name} marked as Inactive`);
+      } else {
+        const list = m.memberships ?? [];
+        const latest = list[0];
+        if (latest?.id) {
+          const today = new Date();
+          const end = new Date(today);
+          end.setDate(end.getDate() + (latest.membership_plans?.duration_days || 30));
+          const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+          await Promise.all([
+            supabase.from("members").update({ status: "active" }).eq("id", m.id),
+            supabase.from("memberships").update({ status: "active", end_date: iso(end) }).eq("id", latest.id),
+          ]);
+        } else {
+          await supabase.from("members").update({ status: "active" }).eq("id", m.id);
+        }
+        show(`${m.full_name} marked as Active`);
+      }
+      await load();
+    } catch {
+      show("Could not update status. Please try again.", "error");
+    } finally {
+      setChangingStatusId(null);
+    }
+  }
+
   // "/" focuses search, Esc closes popovers.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "/" && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) { e.preventDefault(); searchRef.current?.focus(); }
-      if (e.key === "Escape") setPanel(null);
+      if (e.key === "Escape") { setPanel(null); setExportMenuOpen(false); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -304,17 +759,36 @@ export default function MembersPage() {
     persistViews([...views, v]); setViewId(v.id); setNaming(false); setViewName(""); show("View saved");
   }
 
-  function exportCSV() {
+  function exportCSV(target: "filtered" | "all" = "filtered", includeTags: boolean = true) {
+    const dataRows = target === "all" ? members : rows;
     const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
     const head = ["Name", "Phone", "Email", "Gender", "Age", "Plan", "Plan ends", "Status", "Diet plan", "Workout", "Joined"];
-    const lines = [head.map(esc).join(","), ...rows.map((m) => [
-      m.full_name, m.phone, m.email, m.sex, m.age, m.plan, m.endDate?.slice(0, 10), STATUS[m.status].label,
-      m.hasDiet ? "Yes" : "No", m.hasWorkout ? "Yes" : "No", m.created_at.slice(0, 10),
-    ].map(esc).join(","))];
+    if (includeTags) {
+      head.push("Medical Conditions", "Gut Symptoms", "Food Intolerances", "All Tags", "Primary Goal", "Diet Type");
+    }
+    const lines = [head.map(esc).join(","), ...dataRows.map((m) => {
+      const line = [
+        m.full_name, m.phone, m.email, m.sex ? cap(m.sex) : "", m.age, m.plan, m.endDate?.slice(0, 10), STATUS[m.status].label,
+        m.hasDiet ? "Yes" : "No", m.hasWorkout ? "Yes" : "No", m.created_at.slice(0, 10),
+      ];
+      if (includeTags) {
+        line.push(
+          asList(m.medical_conditions).join("; "),
+          asList(m.gut_symptoms).map(cap).join("; "),
+          asList(m.food_intolerances).join("; "),
+          m.allTags.join("; "),
+          m.primary_goal ? m.primary_goal.replace(/_/g, " ") : "",
+          m.diet_type ? m.diet_type.replace(/_/g, " ") : ""
+        );
+      }
+      return line.map(esc).join(",");
+    })];
+    const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
-    a.download = `members-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.href = URL.createObjectURL(blob);
+    a.download = `members-${target}-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
+    show(`Exported ${dataRows.length} member${dataRows.length === 1 ? "" : "s"} to CSV`);
   }
 
   const TABS: { key: Tab; label: string }[] = [
@@ -324,7 +798,7 @@ export default function MembersPage() {
   const dirty = tab !== "all" || chips.length > 0;
 
   return (
-    <div className="ps-page mb" onClick={() => setPanel(null)}>
+    <div className="ps-page mb" onClick={() => { setPanel(null); setExportMenuOpen(false); }}>
       <style>{CSS}</style>
 
       <header className="mb-head">
@@ -336,7 +810,73 @@ export default function MembersPage() {
           </div>
         </div>
         <div className="mb-head-actions">
-          <button type="button" className="ps-btn ps-btn--secondary ps-btn--sm" onClick={exportCSV} disabled={loading || rows.length === 0}><Download size={15} /> Export</button>
+          <div className="mb-anchor" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="ps-btn ps-btn--secondary ps-btn--sm mb-export-btn"
+              onClick={() => setExportMenuOpen((v) => !v)}
+              disabled={loading || members.length === 0}
+              aria-haspopup="true"
+              aria-expanded={exportMenuOpen}
+              title="Export members as CSV"
+            >
+              <Download size={15} />
+              <span>Export</span>
+              <ChevronDown size={13} className={`mb-export-caret ${exportMenuOpen ? "mb-export-caret--up" : ""}`} />
+            </button>
+
+            {exportMenuOpen && (
+              <div className="mb-menu mb-menu--right mb-export-menu" role="menu">
+                <div className="mb-export-menu-head">
+                  <strong>Export options</strong>
+                  <span>CSV format</span>
+                </div>
+
+                <label className="mb-export-check">
+                  <input
+                    type="checkbox"
+                    checked={exportIncludeTags}
+                    onChange={(e) => setExportIncludeTags(e.target.checked)}
+                  />
+                  <span>Include tags & health data</span>
+                </label>
+
+                <div className="mb-menu-sep" />
+
+                <button
+                  type="button"
+                  className="mb-export-opt"
+                  disabled={rows.length === 0}
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    exportCSV("filtered", exportIncludeTags);
+                  }}
+                >
+                  <div className="mb-export-opt-text">
+                    <strong>Filtered list ({rows.length})</strong>
+                    <small>Matching current search and filters</small>
+                  </div>
+                  <Download size={14} className="mb-export-opt-icon" />
+                </button>
+
+                <button
+                  type="button"
+                  className="mb-export-opt"
+                  disabled={members.length === 0}
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    exportCSV("all", exportIncludeTags);
+                  }}
+                >
+                  <div className="mb-export-opt-text">
+                    <strong>All members ({members.length})</strong>
+                    <small>Entire gym directory</small>
+                  </div>
+                  <Download size={14} className="mb-export-opt-icon" />
+                </button>
+              </div>
+            )}
+          </div>
           <Link href="/dashboard/members/new" className="ps-btn ps-btn--primary ps-btn--sm"><Plus size={16} strokeWidth={2.4} /> Add member</Link>
         </div>
       </header>
@@ -346,7 +886,7 @@ export default function MembersPage() {
         <nav className="mb-tabs" role="tablist">
           {TABS.map((t) => (
             <button key={t.key} type="button" role="tab" data-tone={t.key} aria-selected={tab === t.key} onClick={() => { setTab(t.key); setViewId(null); }}>
-              {t.key !== "all" && <span className={`mb-dot mb-dot--${t.key}`} />}
+              {t.key !== "all" && tab === t.key && <span className={`mb-dot mb-dot--${t.key}`} />}
               {t.label}
               <span className="mb-count">{loading ? "–" : counts[t.key]}</span>
             </button>
@@ -362,12 +902,24 @@ export default function MembersPage() {
           </label>
 
           <div className="mb-anchor" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="mb-tool" data-on={panel === "filters" || chips.length > 0} onClick={() => setPanel((p) => (p === "filters" ? null : "filters"))}>
+            <button type="button" className="mb-tool" data-on={panel === "filters" || chips.some((c) => !c.key.startsWith("tag-"))} onClick={() => setPanel((p) => (p === "filters" ? null : "filters"))}>
               <SlidersHorizontal size={15} /> Filters{chips.length > 0 && <span className="mb-badge">{chips.length}</span>}
             </button>
             {panel === "filters" && (
-              <FilterPanel f={filters} set={setF} plans={plans} genders={genders} count={rows.length}
-                onClear={() => { setFilters(NO_FILTERS); setViewId(null); }} onClose={() => setPanel(null)} />
+              <FilterPanel f={filters} set={setF} plans={plans} count={rows.length}
+                onClear={() => { setFilters(NO_FILTERS); setViewId(null); }} onClose={() => setPanel(null)}
+                onExport={() => exportCSV("filtered", exportIncludeTags)} />
+            )}
+          </div>
+
+          <div className="mb-anchor" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="mb-tool" data-on={panel === "tags" || filters.tags.length > 0} onClick={() => setPanel((p) => (p === "tags" ? null : "tags"))}>
+              <Tag size={15} /> Tags{filters.tags.length > 0 && <span className="mb-badge">{filters.tags.length}</span>}
+            </button>
+            {panel === "tags" && (
+              <TagsPanel f={filters} set={setF} count={rows.length}
+                onClear={() => setF({ tags: [] })} onClose={() => setPanel(null)}
+                onExport={() => exportCSV("filtered", exportIncludeTags)} />
             )}
           </div>
 
@@ -449,6 +1001,22 @@ export default function MembersPage() {
                   <span className="mb-text">
                     <strong>{m.full_name}</strong>
                     <small>{meta || `Joined ${formatDate(m.created_at)}`}</small>
+                    {m.allTags.length > 0 && (
+                      <span className="mb-row-tags">
+                        {m.allTags.slice(0, 3).map((t) => (
+                          <span
+                            key={t}
+                            className="mb-mini-tag"
+                            data-match={filters.tags.some((ft) => ft.toLowerCase() === t.toLowerCase())}
+                          >
+                            {t}
+                          </span>
+                        ))}
+                        {m.allTags.length > 3 && (
+                          <span className="mb-mini-tag-more">+{m.allTags.length - 3}</span>
+                        )}
+                      </span>
+                    )}
                     <small className="mb-show-sm">{[m.plan, m.endDate && `${m.daysLeft !== null && m.daysLeft < 0 ? "ended" : "ends"} ${formatDate(m.endDate)}`, m.phone].filter(Boolean).join(" · ")}</small>
                   </span>
                 </span>
@@ -460,11 +1028,56 @@ export default function MembersPage() {
                   <span>{m.plan ? <span className="mb-plan">{m.plan}</span> : <span className="mb-muted">—</span>}</span>
                   <small>{m.endDate ? `${m.daysLeft !== null && m.daysLeft < 0 ? "Ended" : "Ends"} ${formatDate(m.endDate)}` : ""}</small>
                 </span>
-                <span>
-                  <span className={`mb-pill ${STATUS[m.status].cls}`}>
-                    {m.status === "expiring" && m.daysLeft !== null ? (m.daysLeft === 0 ? "Ends today" : `${m.daysLeft}d left`) : STATUS[m.status].label}
-                  </span>
-                </span>
+                <div className="mb-status-cell" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                  <button
+                    type="button"
+                    className={`mb-pill mb-pill--btn ${STATUS[m.status].cls}`}
+                    disabled={changingStatusId === m.id}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setStatusMenuId(statusMenuId === m.id ? null : m.id);
+                    }}
+                    title="Click to change active/inactive status without opening member page"
+                    aria-label={`Change status for ${m.full_name}`}
+                  >
+                    {changingStatusId === m.id ? (
+                      <Loader2 size={11} className="ps-spin" />
+                    ) : (
+                      <span className="mb-status-dot" />
+                    )}
+                    <span>
+                      {m.status === "expiring" && m.daysLeft !== null
+                        ? (m.daysLeft === 0 ? "Ends today" : `${m.daysLeft}d left`)
+                        : STATUS[m.status].label}
+                    </span>
+                    <ChevronDown size={11} className="mb-status-caret" />
+                  </button>
+                  {statusMenuId === m.id && (
+                    <div className="mb-status-menu" role="menu" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className={m.status === "active" || m.status === "expiring" ? "active" : ""}
+                        onClick={() => handleQuickStatusChange(m, "active")}
+                      >
+                        <span className="mb-dot mb-dot--green" />
+                        <span>Active</span>
+                        {(m.status === "active" || m.status === "expiring") && <Check size={12} className="mb-check" />}
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className={m.status === "expired" || m.status === "none" ? "active" : ""}
+                        onClick={() => handleQuickStatusChange(m, "inactive")}
+                      >
+                        <span className="mb-dot mb-dot--grey" />
+                        <span>Inactive</span>
+                        {(m.status === "expired" || m.status === "none") && <Check size={12} className="mb-check" />}
+                      </button>
+                    </div>
+                  )}
+                </div>
                 <span className="mb-progs mb-hide-sm">
                   <span title={m.hasDiet ? "Has an active diet plan" : "No diet plan"} data-on={m.hasDiet}><Salad size={14} /></span>
                   <span title={m.hasWorkout ? "Has an active workout" : "No workout"} data-on={m.hasWorkout}><Dumbbell size={14} /></span>
@@ -512,13 +1125,22 @@ const CSS = `
 
 .mb-card { background: var(--surface, #fff); border: 1px solid var(--mb-line); border-radius: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
 
-.mb-tabs { display: flex; gap: 2px; padding: 0 12px; border-bottom: 1px solid var(--mb-line); overflow-x: auto; scrollbar-width: none; }
-.mb-tabs button { display: inline-flex; align-items: center; gap: 7px; height: 46px; padding: 0 12px; border: none; background: none; font: inherit; font-size: 13.5px; font-weight: 550; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
-.mb-tabs button:hover { color: var(--text-primary); }
-.mb-tabs button[aria-selected="true"] { color: var(--text-primary); border-bottom-color: var(--accent); }
-.mb-count { min-width: 22px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--mb-soft); color: var(--text-tertiary); font-size: 12px; font-weight: 600; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; }
-.mb-tabs button[aria-selected="true"] .mb-count { background: var(--accent-dim); color: var(--accent); }
-.mb-dot { width: 7px; height: 7px; border-radius: 50%; }
+.mb-tabs { display: flex; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--mb-line); overflow-x: auto; scrollbar-width: none; background: transparent !important; }
+.mb-tabs::-webkit-scrollbar { display: none; }
+.mb-tabs button { display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 6px; border: none !important; background: transparent !important; font: inherit; font-size: 13.5px; font-weight: 550; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent !important; margin-bottom: -1px; white-space: nowrap; border-radius: 0 !important; box-shadow: none !important; transition: color 150ms ease, border-color 150ms ease; }
+.mb-tabs button:hover { color: var(--text-primary); background: transparent !important; }
+.mb-tabs button[aria-selected="true"] { color: var(--text-primary) !important; background: transparent !important; border: none !important; border-bottom: 2px solid var(--accent) !important; font-weight: 650; box-shadow: none !important; }
+.mb-tabs button[aria-selected="true"][data-tone="active"] { border-bottom-color: #34c759 !important; }
+.mb-tabs button[aria-selected="true"][data-tone="expiring"] { border-bottom-color: #ff9f0a !important; }
+.mb-tabs button[aria-selected="true"][data-tone="expired"] { border-bottom-color: #ff3b30 !important; }
+.mb-tabs button[aria-selected="true"][data-tone="none"] { border-bottom-color: var(--text-tertiary) !important; }
+.mb-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--mb-soft); color: var(--text-tertiary); font-size: 11.5px; font-weight: 600; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; transition: background 150ms, color 150ms; }
+.mb-tabs button[aria-selected="true"] .mb-count { background: var(--accent-dim) !important; color: var(--accent) !important; }
+.mb-tabs button[aria-selected="true"][data-tone="active"] .mb-count { background: rgba(52, 199, 89, 0.15) !important; color: #248a47 !important; }
+.mb-tabs button[aria-selected="true"][data-tone="expiring"] .mb-count { background: rgba(255, 159, 10, 0.15) !important; color: #c46800 !important; }
+.mb-tabs button[aria-selected="true"][data-tone="expired"] .mb-count { background: rgba(255, 59, 48, 0.15) !important; color: #c4001a !important; }
+.mb-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; animation: mb-dot-pop 160ms cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes mb-dot-pop { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .mb-dot--active { background: #34c759; } .mb-dot--expiring { background: #ff9f0a; } .mb-dot--expired { background: #ff3b30; } .mb-dot--none { background: #aeaeb2; }
 
 .mb-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px; flex-wrap: wrap; }
@@ -654,16 +1276,31 @@ const CSS = `
 .mb-head-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #0a84ff, #5e5ce6); box-shadow: 0 6px 16px rgba(10,132,255,0.28); flex-shrink: 0; }
 .mb-card { position: relative; overflow: visible; }
 .mb-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; border-radius: 14px 14px 0 0; background: linear-gradient(90deg, #0a84ff, #5e5ce6 40%, #af52de 70%, #ff9f0a); }
-.mb-tabs { gap: 6px; padding: 10px 12px; }
-.mb-tabs button { height: 34px; border-radius: 10px; border-bottom: none; margin-bottom: 0; }
-.mb-tabs button:hover { background: #f4f5f8; }
-.mb-tabs button[aria-selected="true"] { color: #fff; background: var(--accent); }
-.mb-tabs button[aria-selected="true"][data-tone="active"] { background: #1f9d48; }
-.mb-tabs button[aria-selected="true"][data-tone="expiring"] { background: #e88a00; }
-.mb-tabs button[aria-selected="true"][data-tone="expired"] { background: #e0293a; }
-.mb-tabs button[aria-selected="true"][data-tone="none"] { background: #6e6e73; }
-.mb-tabs button[aria-selected="true"] .mb-count { background: rgba(255,255,255,0.22); color: #fff; }
-.mb-tabs button[aria-selected="true"] .mb-dot { background: #fff; }
+.dark .mb { --mb-line: var(--border); --mb-soft: var(--surface-2); }
+.dark .mb-card { background: var(--surface-2); border-color: var(--border); }
+.dark .mb-search input { background: var(--surface-3); border-color: var(--border); color: #fff; }
+.dark .mb-tool { background: var(--surface-2); border-color: var(--border); color: var(--text-secondary); }
+.dark .mb-tool:hover { background: var(--surface-3); color: #fff; }
+.dark .mb-tool[data-on="true"] { background: rgba(10, 132, 255, 0.2); border-color: rgba(10, 132, 255, 0.4); color: #58a6ff; }
+.dark .mb-pop { background: var(--surface-2); border-color: var(--border-mid); color: var(--text-primary); }
+.dark .mb-pop-head { border-bottom: 1px solid var(--border); }
+.dark .mb-pop-foot { border-top: 1px solid var(--border); }
+.dark .mb-opt { background: var(--surface-3); border-color: var(--border); color: var(--text-secondary); }
+.dark .mb-opt:hover { color: #fff; border-color: var(--border-mid); }
+.dark .mb-opt[data-on="true"] { background: rgba(10, 132, 255, 0.2); border-color: var(--accent); color: #58a6ff; }
+.dark .mb-seg { background: var(--surface-3); }
+.dark .mb-seg button { color: var(--text-secondary); }
+.dark .mb-seg button[data-on="true"] { background: var(--surface-2); color: #fff; }
+.dark .mb-input { background: var(--surface-3); border-color: var(--border); color: #fff; }
+.dark .mb-chip { background: var(--surface-3); border-color: var(--border); color: var(--text-primary); }
+.dark .mb-th { background: var(--surface-3); color: var(--text-tertiary); }
+.dark .mb-tr { border-bottom-color: var(--border); }
+.dark .mb-row:hover { background: var(--surface-3); }
+.dark .mb-plan { background: rgba(10, 132, 255, 0.18); color: #58a6ff; }
+.dark .mb-tabs button[aria-selected="true"] { color: #ffffff !important; }
+.dark .mb-tabs button[aria-selected="true"][data-tone="active"] .mb-count { background: rgba(52, 199, 89, 0.2) !important; color: #34c759 !important; }
+.dark .mb-tabs button[aria-selected="true"][data-tone="expiring"] .mb-count { background: rgba(255, 159, 10, 0.2) !important; color: #ff9f0a !important; }
+.dark .mb-tabs button[aria-selected="true"][data-tone="expired"] .mb-count { background: rgba(255, 69, 58, 0.2) !important; color: #ff6961 !important; }
 .mb-th { background: linear-gradient(180deg, #f7f8fb, #f2f4f8); }
 .mb-row { position: relative; }
 .mb-row::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: transparent; }
@@ -705,4 +1342,135 @@ const CSS = `
   .mb-foot { border-top: 1px solid var(--mb-line); }
 }
 .mb-plan { line-height: 18px; margin-bottom: 1px; }
+
+.mb-status-cell {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.mb-pill--btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 650;
+  padding: 0 9px;
+  height: 22px;
+  border-radius: 11px;
+  transition: all 140ms ease;
+  background: #f0f0f3;
+  color: #6e6e73;
+}
+.mb-pill--btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+.mb-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+.mb-status-caret {
+  opacity: 0.65;
+  transition: transform 140ms ease;
+  margin-left: 1px;
+}
+.mb-status-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  min-width: 125px;
+  padding: 4px;
+  border-radius: 10px;
+  background: #ffffff;
+  border: 1px solid var(--border, #e5e5ea);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 0 1px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dark .mb-status-menu {
+  background: var(--surface-2, #1c1c1e);
+  border-color: var(--border, #2c2c2e);
+}
+.mb-status-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 9px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text-primary);
+  cursor: pointer;
+  text-align: left;
+  transition: background 120ms ease;
+}
+.mb-status-menu button:hover {
+  background: var(--mb-soft, rgba(118, 118, 128, 0.1));
+}
+.mb-status-menu button.active {
+  font-weight: 650;
+  background: rgba(10, 102, 214, 0.08);
+  color: var(--accent, #0a66d6);
+}
+.dark .mb-status-menu button.active {
+  background: rgba(10, 132, 255, 0.18);
+  color: #58a6ff;
+}
+.mb-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.mb-dot--green { background: #34c759; }
+.mb-dot--grey { background: #8e8e93; }
+.mb-check { margin-left: auto; color: var(--accent); }
+
+.mb-pop--wide { width: 780px; max-width: calc(100vw - 32px); max-height: min(720px, calc(100vh - 160px)); }
+.mb-pop-body--tags { padding: 4px 14px 14px; }
+.mb-tag-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 10px; }
+.mb-tag-card { background: #fbfbfc; border: 1px solid var(--mb-line, #e5e7eb); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.mb-tag-card-title { font-size: 11px; font-weight: 750; color: var(--text-tertiary, #6b7280); letter-spacing: 0.05em; text-transform: uppercase; margin: 0; }
+.mb-tag-card-chips { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+.mb-tag-pill { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 9999px; font-size: 12.5px; font-weight: 500; border: 1px solid var(--mb-line, #e5e7eb); background: #ffffff; color: var(--text-primary, #374151); cursor: pointer; transition: all 120ms ease; user-select: none; }
+.mb-tag-pill:hover { border-color: #9ca3af; color: #111827; }
+.mb-tag-pill[data-selected="true"] { border: 2px solid #111827; font-weight: 700; color: #111827; background: #ffffff; padding: 0 11px; }
+.dark .mb-tag-card { background: var(--surface-3, #242426); border-color: var(--border, #3a3a3c); }
+.dark .mb-tag-card-title { color: var(--text-tertiary); }
+.dark .mb-tag-pill { background: var(--surface-2, #1c1c1e); border-color: var(--border, #3a3a3c); color: var(--text-primary); }
+.dark .mb-tag-pill:hover { border-color: var(--border-mid, #48484a); }
+.dark .mb-tag-pill[data-selected="true"] { border: 2px solid #ffffff; color: #ffffff; background: rgba(255,255,255,0.12); }
+.mb-filter-export-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--mb-soft); border: 1px solid var(--mb-line); margin-bottom: 4px; }
+.mb-export-btn { display: inline-flex; align-items: center; gap: 6px; }
+.mb-export-caret { transition: transform 140ms ease; opacity: 0.7; }
+.mb-export-caret--up { transform: rotate(180deg); }
+.mb-export-menu { min-width: 250px; padding: 6px; }
+.mb-export-menu-head { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px 5px; font-size: 12.5px; color: var(--text-tertiary); }
+.mb-export-check { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; padding: 6px 10px; cursor: pointer; color: var(--text-primary); border-radius: 7px; margin-bottom: 2px; }
+.mb-export-check:hover { background: var(--mb-soft); }
+.mb-export-check input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+.mb-export-opt { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; padding: 8px 10px; border: none; background: none; border-radius: 7px; font: inherit; text-align: left; cursor: pointer; color: var(--text-primary); transition: background 120ms ease; }
+.mb-export-opt:hover:not(:disabled) { background: var(--mb-soft); }
+.mb-export-opt:disabled { opacity: 0.45; cursor: default; }
+.mb-export-opt-text strong { display: block; font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.mb-export-opt-text small { display: block; font-size: 11.5px; color: var(--text-tertiary); margin-top: 1px; }
+.mb-export-opt-icon { color: var(--text-tertiary); flex-shrink: 0; }
+.mb-seg--sm { height: 28px; }
+.mb-seg--sm button { height: 24px; font-size: 12px; }
+.mb-row-tags { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; margin-top: 3px; }
+.mb-mini-tag { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: 9px; font-size: 10.5px; font-weight: 600; background: var(--mb-soft); color: var(--text-secondary); border: 1px solid var(--mb-line); }
+.mb-mini-tag[data-match="true"] { background: #111827; color: #ffffff; border-color: #111827; }
+.dark .mb-mini-tag[data-match="true"] { background: #ffffff; color: #111827; border-color: #ffffff; }
+.mb-mini-tag-more { font-size: 10.5px; font-weight: 650; color: var(--text-tertiary); margin-left: 2px; }
 `;

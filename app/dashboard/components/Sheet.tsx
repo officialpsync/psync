@@ -186,18 +186,18 @@ const SHEET_CSS = `
   position: relative; inset: auto; margin: 0;
   display: flex; flex-direction: column;
   width: 100%; max-width: var(--sheet-w, 520px); max-height: min(90dvh, 920px);
-  background: #fff; border-radius: 24px; outline: none; overflow: hidden;
-  box-shadow: 0 0 0 1px rgba(15,23,42,0.06), 0 24px 64px -12px rgba(15,23,42,0.28);
+  background: var(--surface, #fff); border-radius: 24px; outline: none; overflow: hidden;
+  box-shadow: 0 0 0 1px var(--border, rgba(15,23,42,0.06)), 0 24px 64px -12px rgba(15,23,42,0.28);
   opacity: 0; transform: translateY(8px) scale(0.97);
   transition: opacity 200ms var(--db-ease, cubic-bezier(0.23,1,0.32,1)), transform 260ms var(--db-ease, cubic-bezier(0.23,1,0.32,1));
 }
 .ps-sheet-root[data-open="true"] .ps-sheet { opacity: 1; transform: none; }
 
 .ps-sheet-root .ps-sheet-header {
-  flex-shrink: 0; position: relative; z-index: 2; background: #fff;
+  flex-shrink: 0; position: relative; z-index: 2; background: var(--surface, #fff);
   padding: 22px 24px 14px; transition: box-shadow 200ms ease;
 }
-.ps-sheet-root .ps-sheet[data-scrolled="true"] .ps-sheet-header { box-shadow: 0 1px 0 rgba(15,23,42,0.08); }
+.ps-sheet-root .ps-sheet[data-scrolled="true"] .ps-sheet-header { box-shadow: 0 1px 0 var(--border, rgba(15,23,42,0.08)); }
 .ps-sheet-root .ps-sheet-handle { display: none; }
 .ps-sheet-root .ps-sheet-titlebar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
 .ps-sheet-root .ps-sheet-title { margin: 0; font-size: 19px; line-height: 1.25; font-weight: 680; letter-spacing: -0.02em; color: var(--text-primary); }
@@ -216,8 +216,8 @@ const SHEET_CSS = `
 
 .ps-sheet-root .ps-sheet-footer {
   flex-shrink: 0; display: flex; align-items: center; justify-content: flex-end; gap: 10px;
-  padding: 14px 24px; border-top: 1px solid rgba(15,23,42,0.07);
-  background: rgba(255,255,255,0.88); -webkit-backdrop-filter: blur(16px) saturate(180%); backdrop-filter: blur(16px) saturate(180%);
+  padding: 14px 24px; border-top: 1px solid var(--border, rgba(15,23,42,0.07));
+  background: var(--surface-2, rgba(255,255,255,0.88)); -webkit-backdrop-filter: blur(16px) saturate(180%); backdrop-filter: blur(16px) saturate(180%);
 }
 .ps-sheet-root .ps-sheet-footer .ps-btn { height: 42px; padding: 0 18px; border-radius: 12px; font-weight: 620; }
 /* Push the first secondary action (Archive / Cancel) left when there are two buttons */
