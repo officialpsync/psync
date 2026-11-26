@@ -14,7 +14,10 @@ import {
   MoreHorizontal, Phone, Receipt, ShieldAlert, Sparkles, StickyNote, Target, User,
 } from "lucide-react";
 import { CopyPlanSheet, type CopyMember, type Kind } from "../components/CopyPlanSheet";
-import { EyeOff, GripVertical, LayoutGrid, RotateCcw, Check as CheckIcon } from "lucide-react";
+import { SendOnboardingSheet } from "../components/SendOnboardingSheet";
+import { OnboardingReviewSheet } from "../components/OnboardingReviewSheet";
+import { OnboardingActivityLog } from "../components/OnboardingActivityLog";
+import { EyeOff, GripVertical, LayoutGrid, RotateCcw, Check as CheckIcon, Send, FileText } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor, TouchSensor, useSensor, useSensors, type DragEndEvent,
 } from "@dnd-kit/core";
@@ -35,8 +38,8 @@ type Member = {
 };
 
 type Membership = {
-  id: string; status: string; start_date: string; end_date: string | null;
-  membership_plans: { name: string; duration_days: number | null } | null;
+  id: string; status: string; start_date: string; end_date: string | null; plan_id?: string | null;
+  membership_plans: { id?: string; name: string; duration_days: number | null } | null;
 };
 
 type Payment = { id: string; total_paise: number; paid_at: string; method: string | null; notes: string | null; status: string };
@@ -672,17 +675,17 @@ function Heatmap({ days }: { days: HeatDay[] }) {
 }
 
 // ── Editable overview layout (same idea as the dashboard Overview; saved on this device) ──
-type WidgetId = "membership" | "attendance" | "programs" | "body" | "health" | "personal" | "notes";
+type WidgetId = "membership" | "attendance" | "programs" | "body" | "health" | "personal" | "notes" | "onboarding";
 type Span = 4 | 6 | 8 | 12;
 type Layout = { order: WidgetId[]; hidden: WidgetId[]; sizes: Partial<Record<WidgetId, Span>> };
 const WIDGET_LABEL: Record<WidgetId, string> = {
   membership: "Membership", attendance: "Attendance", programs: "Current programs",
-  body: "Body and goals", health: "Health", personal: "Personal", notes: "Notes",
+  body: "Body and goals", health: "Health", personal: "Personal", notes: "Notes", onboarding: "Onboarding Status",
 };
 const DEFAULT_LAYOUT: Layout = {
-  order: ["programs", "health", "body", "membership", "personal", "attendance", "notes"],
+  order: ["onboarding", "programs", "health", "body", "membership", "personal", "attendance", "notes"],
   hidden: [],
-  sizes: { programs: 4, health: 4, body: 4, membership: 8, personal: 4, attendance: 8, notes: 12 },
+  sizes: { onboarding: 8, programs: 4, health: 4, body: 4, membership: 8, personal: 4, attendance: 8, notes: 12 },
 };
 const LAYOUT_KEY = "psync.member.overview.layout.v2";
 const SIZE_LABEL: Record<Span, string> = { 4: "S", 6: "M", 8: "L", 12: "Full" };
@@ -752,12 +755,23 @@ export default function MemberProfilePage() {
   const [renewSheetOpen, setRenewSheetOpen] = useState(false);
   const [assignSheetOpen, setAssignSheetOpen] = useState(false);
   const [bookClassSheetOpen, setBookClassSheetOpen] = useState(false);
+  const [sendOnboardingOpen, setSendOnboardingOpen] = useState(false);
+  const [reviewOnboardingOpen, setReviewOnboardingOpen] = useState(false);
+  const [onboardingStatus, setOnboardingStatus] = useState<string>("unassigned");
   const [assignedPrograms, setAssignedPrograms] = useState<AssignedProgram[]>([]);
   const [classBookings, setClassBookings] = useState<MemberClassBooking[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [copy, setCopy] = useState<CopyState>(null);
   const [copyMembers, setCopyMembers] = useState<CopyMember[] | null>(null);
   const { toast, show } = useToast();
+
+  const loadOnboardingStatus = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/portal/onboarding?m=${id}`);
+      const data = await res.json();
+      if (data?.status) setOnboardingStatus(data.status);
+    } catch {}
+  }, [id]);
   const [photoUploading, setPhotoUploading] = useState(false);
   const [editing, setEditing] = useState(false);
   const [layout, setLayout] = useState<Layout>(DEFAULT_LAYOUT);
@@ -851,18 +865,24 @@ export default function MemberProfilePage() {
       setMember(m as Member);
       setMemberships((ms as Membership[]) || []);
       setPayments((p as Payment[]) || []);
+      loadOnboardingStatus();
     }
     load();
-  }, [id, loadAttendance, loadWorkouts, loadClasses, loadDietPlans]);
+  }, [id, loadAttendance, loadWorkouts, loadClasses, loadDietPlans, loadOnboardingStatus]);
 
-  // Close the actions menu on outside click / Esc
+  // Close the actions menu on outside click / Esc / scroll
   useEffect(() => {
     if (!menuOpen) return;
     const close = () => setMenuOpen(false);
     const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
     window.addEventListener("click", close);
     window.addEventListener("keydown", key);
-    return () => { window.removeEventListener("click", close); window.removeEventListener("keydown", key); };
+    window.addEventListener("scroll", close, { passive: true });
+    return () => {
+      window.removeEventListener("click", close);
+      window.removeEventListener("keydown", key);
+      window.removeEventListener("scroll", close);
+    };
   }, [menuOpen]);
 
   const stats = useMemo(() => {
@@ -1022,6 +1042,8 @@ export default function MemberProfilePage() {
       const portalUrl = typeof window !== "undefined" ? `${window.location.origin}/portal?m=${member.id}` : `/portal?m=${member.id}`;
       window.open(portalUrl, "_blank");
     }},
+    { label: "Send Onboarding Form", icon: Send, run: () => setSendOnboardingOpen(true) },
+    { label: "Review Onboarding & Audit", icon: FileText, run: () => setReviewOnboardingOpen(true) },
     { label: activeProgram ? "Change workout" : "Assign workout", icon: Dumbbell, run: () => setAssignSheetOpen(true) },
     { label: "Book a class", icon: BookOpen, run: () => setBookClassSheetOpen(true) },
     ...(activeDiet ? [{ label: "Copy diet plan", icon: Copy, run: () => openCopy("diet", activeDiet.id) }] : []),
@@ -1030,6 +1052,42 @@ export default function MemberProfilePage() {
 
   // Overview cards, keyed for the editable layout. Notes only exists when there are notes.
   const widgets: Record<WidgetId, React.ReactNode> = {
+    onboarding: (
+      <section className="mp-card">
+        <div className="mp-card-h">
+          <h2><FileText size={15} /> Member Onboarding</h2>
+          <div style={{ display: "flex", gap: 6 }}>
+            {onboardingStatus === "submitted" ? (
+              <button
+                type="button"
+                className="ps-btn ps-btn--sm"
+                style={{ background: "#f59e0b", color: "#fff" }}
+                onClick={() => setReviewOnboardingOpen(true)}
+              >
+                <AlertTriangle size={13} /> Review Submission
+              </button>
+            ) : onboardingStatus === "synced" ? (
+              <button
+                type="button"
+                className="ps-btn ps-btn--tinted ps-btn--sm"
+                onClick={() => setReviewOnboardingOpen(true)}
+              >
+                <CheckIcon size={13} /> Synced Profile
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="ps-btn ps-btn--primary ps-btn--sm"
+                onClick={() => setSendOnboardingOpen(true)}
+              >
+                <Send size={13} /> Send Form
+              </button>
+            )}
+          </div>
+        </div>
+        <OnboardingActivityLog memberId={member.id} />
+      </section>
+    ),
     membership: (
       <section className="mp-card">
         <div className="mp-card-h">
@@ -1215,7 +1273,7 @@ export default function MemberProfilePage() {
       </div>
 
       {/* ── Hero ── */}
-      <header className="mp-hero" data-tone={tone}>
+      <header className="mp-hero" data-tone={tone} data-menu-open={menuOpen}>
         <div className="mp-hero-bg" aria-hidden />
         <div className="mp-hero-top">
           <div className="mp-photo" data-tone={tone}>
@@ -1287,6 +1345,36 @@ export default function MemberProfilePage() {
           </div>
 
           <div className="mp-hero-actions">
+            {onboardingStatus === "submitted" ? (
+              <button
+                type="button"
+                className="mp-glass"
+                style={{ background: "rgba(245, 158, 11, 0.2)", borderColor: "#f59e0b", color: "#f59e0b", fontWeight: 600 }}
+                onClick={() => setReviewOnboardingOpen(true)}
+              >
+                <AlertTriangle size={15} />
+                <span>Review Onboarding</span>
+              </button>
+            ) : onboardingStatus === "synced" ? (
+              <button
+                type="button"
+                className="mp-glass"
+                style={{ background: "rgba(16, 185, 129, 0.15)", borderColor: "#10b981", color: "#10b981" }}
+                onClick={() => setReviewOnboardingOpen(true)}
+              >
+                <CheckIcon size={15} />
+                <span>Onboarding Synced</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="mp-glass"
+                onClick={() => setSendOnboardingOpen(true)}
+              >
+                <Send size={15} />
+                <span>Send Onboarding</span>
+              </button>
+            )}
             <Link href={`/dashboard/members/${member.id}/edit`} className="mp-glass"><Pencil size={15} /><span>Edit</span></Link>
             <button type="button" className="mp-glass mp-glass--solid mp-hide-sm" onClick={toggleCheckIn} disabled={busy}>
               {busy ? <Loader2 size={15} className="ps-spin" /> : openVisit ? <LogOut size={15} /> : <LogIn size={15} />}
@@ -1596,6 +1684,30 @@ export default function MemberProfilePage() {
         onDone={(msg) => { setCopy(null); setCopyMembers(null); show(msg); }}
         onError={(msg) => show(msg, "error")}
       />
+
+      {sendOnboardingOpen && (
+        <SendOnboardingSheet
+          member={member}
+          onClose={() => setSendOnboardingOpen(false)}
+          onDispatched={() => {
+            setOnboardingStatus("sent");
+            show("Onboarding form dispatched to member");
+          }}
+        />
+      )}
+
+      {reviewOnboardingOpen && (
+        <OnboardingReviewSheet
+          member={member}
+          onClose={() => setReviewOnboardingOpen(false)}
+          onSynced={async () => {
+            setOnboardingStatus("synced");
+            const { data: updatedM } = await supabase.from("members").select("*, branches(name)").eq("id", id).single();
+            if (updatedM) setMember(updatedM as Member);
+            show("Member profile synced & approved");
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1615,8 +1727,9 @@ const MP_CSS = `
 .mp-crumbs b { color: var(--text-primary); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Hero */
-.mp-hero { position: relative; border-radius: 22px; padding: 22px 22px 18px; color: #fff; overflow: hidden; isolation: isolate; box-shadow: 0 18px 40px -18px rgba(10, 60, 160, 0.55); }
-.mp-hero-bg { position: absolute; inset: 0; z-index: -1; background:
+.mp-hero { position: relative; border-radius: 22px; padding: 22px 22px 18px; color: #fff; overflow: visible; box-shadow: 0 18px 40px -18px rgba(10, 60, 160, 0.55); z-index: 1; }
+.mp-hero[data-menu-open="true"] { z-index: 100 !important; }
+.mp-hero-bg { position: absolute; inset: 0; z-index: -1; border-radius: 22px; overflow: hidden; pointer-events: none; background:
   radial-gradient(600px 220px at 85% -10%, rgba(94, 92, 230, 0.75), transparent 60%),
   radial-gradient(500px 260px at 10% 120%, rgba(48, 176, 199, 0.55), transparent 60%),
   linear-gradient(120deg, #0a3d91 0%, #0a66d6 45%, #3c4fe0 100%); }
@@ -1674,11 +1787,48 @@ const MP_CSS = `
 .mp-glass--solid { background: #fff; color: #0a4fb0; border-color: #fff; }
 .mp-glass--solid:hover { background: #eef4ff; }
 .mp-glass--icon { width: 38px; padding: 0; justify-content: center; }
-.mp-menu-anchor { position: relative; }
-.mp-menu { position: absolute; right: 0; top: calc(100% + 8px); z-index: 50; min-width: 220px; padding: 6px; border-radius: 14px; background: #fff; box-shadow: 0 0 0 1px rgba(15,23,42,0.06), 0 18px 40px -10px rgba(15,23,42,0.3); }
-.mp-menu button, .mp-menu a { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: none; background: none; border-radius: 9px; font: inherit; font-size: 14px; color: var(--text-primary); text-decoration: none; cursor: pointer; text-align: left; }
-.mp-menu button:hover, .mp-menu a:hover { background: var(--mp-soft); }
-.mp-menu svg { color: var(--text-tertiary); }
+.mp-menu-anchor { position: relative; z-index: 120; }
+.mp-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 999;
+  min-width: 240px;
+  max-height: min(450px, calc(100vh - 120px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+  border-radius: 14px;
+  background: #ffffff !important;
+  border: 1px solid var(--border, #e5e5ea);
+  box-shadow: 0 20px 48px -6px rgba(0, 0, 0, 0.28), 0 0 1px rgba(0, 0, 0, 0.15);
+  color: var(--text-primary, #111827);
+}
+.mp-menu button, .mp-menu a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 12px;
+  border: none;
+  background: none;
+  border-radius: 9px;
+  font: inherit;
+  font-size: 13.5px;
+  font-weight: 550;
+  color: var(--text-primary, #111827) !important;
+  text-decoration: none;
+  cursor: pointer;
+  text-align: left;
+  transition: background 120ms ease;
+}
+.mp-menu button:hover, .mp-menu a:hover {
+  background: var(--mp-soft, #f3f4f6);
+}
+.mp-menu svg {
+  color: var(--text-tertiary, #6b7280);
+  flex-shrink: 0;
+}
 
 .mp-stats { display: grid; grid-template-columns: minmax(220px, 1.35fr) repeat(4, minmax(0, 1fr)); gap: 10px; margin-top: 18px; }
 .mp-stat { display: flex; align-items: center; gap: 11px; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.18); backdrop-filter: blur(10px); min-width: 0; }
@@ -1868,7 +2018,7 @@ a.mp-row:hover { background: var(--mp-soft); }
   .mp-summary strong { font-size: 15px; }
   .mp-hrow { grid-template-columns: minmax(0,1fr) auto; }
   .mp-hrow small { grid-column: 1; grid-row: 2; }
-  .mp-menu { position: fixed; left: 10px; right: 10px; top: auto; bottom: calc(80px + env(safe-area-inset-bottom, 0px)); z-index: 60; }
+  .mp-menu { position: absolute; right: 0; left: auto; top: calc(100% + 8px); bottom: auto; width: 220px; z-index: 150; }
   .mp-bottombar { position: fixed; left: 0; right: 0; bottom: calc(var(--tabbar-h, 0px) + env(safe-area-inset-bottom, 0px)); z-index: 40; display: flex; gap: 8px; padding: 10px 12px; background: rgba(255,255,255,0.92); border-top: 1px solid var(--mp-line); backdrop-filter: blur(16px) saturate(180%); }
   .mp-bottombar .ps-btn { flex: 1; height: 46px; justify-content: center; border-radius: 12px; }
   .mp-bb-btn { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; background: #e6f6ec; color: #1f8a3b; flex-shrink: 0; }
@@ -1933,9 +2083,10 @@ a.mp-row:hover { background: var(--mp-soft); }
 .dark .mp-plan-actions > *:hover { background: var(--surface-3) !important; color: #fff !important; }
 .dark .mp-plan-actions > * + * { border-left-color: var(--border) !important; }
 .dark .mp-plan-actions { border-top-color: var(--border) !important; }
-.dark .mp-menu { background: var(--surface-2) !important; border-color: var(--border-mid) !important; }
-.dark .mp-menu button, .dark .mp-menu a { color: var(--text-primary) !important; }
-.dark .mp-menu button:hover, .dark .mp-menu a:hover { background: var(--surface-3) !important; color: #fff !important; }
+.dark .mp-menu { background: var(--surface-2, #1c1c1e) !important; border-color: var(--border, #3a3a3c) !important; box-shadow: 0 20px 48px -4px rgba(0, 0, 0, 0.6), 0 0 1px rgba(255, 255, 255, 0.12); }
+.dark .mp-menu button, .dark .mp-menu a { color: #ffffff !important; }
+.dark .mp-menu button:hover, .dark .mp-menu a:hover { background: var(--surface-3, #2c2c2e) !important; color: #ffffff !important; }
+.dark .mp-menu svg { color: #9ca3af; }
 .dark .mp-summary > div:not(:first-child) { background: var(--surface-2) !important; border-color: var(--border) !important; }
 .dark .mp-row { border-color: var(--border) !important; }
 .dark .mp-row:hover { background: var(--surface-3) !important; }

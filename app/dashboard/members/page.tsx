@@ -6,17 +6,58 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
-  Plus, Search, X, SlidersHorizontal, ChevronRight, ChevronLeft, ChevronDown, Copy, Check, Salad, Dumbbell,
-  Download, Bookmark, Trash2, ArrowUpDown, Users, Loader2, Tag,
+  Plus, Search, X, SlidersHorizontal, ChevronRight, ChevronLeft, ChevronDown, Check,
+  Download, Bookmark, Trash2, ArrowUpDown, Users, Loader2, FileSpreadsheet, FileText, RefreshCw,
+  Upload, Pin, ArrowLeftRight,
 } from "lucide-react";
+import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 import { createClient } from "@/lib/supabase";
-import { Avatar, Skeleton, useToast, formatDate } from "../components/ui";
-import { CopyPlanSheet } from "./components/CopyPlanSheet";
+import { Avatar, Skeleton, useToast, formatDate, formatINR } from "../components/ui";
+import { RenewalSheet } from "./components/RenewalSheet";
+import { ImportMembersSheet } from "./components/ImportMembersSheet";
 import { loadPref, savePref } from "../leads/lib";
 
 const supabase = createClient();
+
+function WhatsAppIcon({ size = 15 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.05 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+    </svg>
+  );
+}
+
+function waLink(phone: string | null, text?: string) {
+  if (!phone) return null;
+  const d = phone.replace(/\D/g, "");
+  const num = d.length === 10 ? `91${d}` : d;
+  return `https://wa.me/${num}${text ? `?text=${encodeURIComponent(text)}` : ""}`;
+}
+
+function HighlightText({ text, highlight }: { text: string | null | undefined; highlight: string }) {
+  if (!text) return null;
+  if (!highlight || !highlight.trim()) return <>{text}</>;
+  const h = highlight.trim();
+  const escaped = h.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const regex = new RegExp(`(${escaped})`, "gi");
+  const parts = text.split(regex);
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        part.toLowerCase() === h.toLowerCase() ? (
+          <mark key={i} className="mb-search-mark">{part}</mark>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  );
+}
 
 // ── Data ─────────────────────────────────────────────────────────────────────
 
@@ -53,10 +94,22 @@ function memberAllTags(m: MemberRaw): string[] {
   return res;
 }
 
-type Membership = { id?: string; status: string; end_date: string; membership_plans: { name: string; duration_days?: number | null } | null };
+type Membership = {
+  id?: string;
+  status: string;
+  end_date: string;
+  membership_plans: {
+    id?: string;
+    name: string;
+    duration_days?: number | null;
+    price_paise?: number | null;
+  } | null;
+};
 type MemberRaw = {
   id: string; full_name: string; phone: string | null; email: string | null; sex: string | null;
   date_of_birth: string | null; created_at: string;
+  status?: string | null;
+  outstanding_balance_paise?: number | null;
   medical_conditions?: string[] | string | null;
   gut_symptoms?: string[] | string | null;
   food_intolerances?: string[] | string | null;
@@ -66,8 +119,19 @@ type MemberRaw = {
 };
 type StatusKey = "active" | "expiring" | "expired" | "none";
 type Member = MemberRaw & {
-  status: StatusKey; plan: string | null; planDurationDays: number | null; endDate: string | null; daysLeft: number | null; age: number | null;
-  hasDiet: boolean; hasWorkout: boolean; allTags: string[];
+  status: StatusKey;
+  memberStatus: "active" | "inactive";
+  plan: string | null;
+  planId: string | null;
+  planPricePaise: number | null;
+  planDurationDays: number | null;
+  endDate: string | null;
+  daysLeft: number | null;
+  age: number | null;
+  duesPaise: number;
+  hasDiet: boolean;
+  hasWorkout: boolean;
+  allTags: string[];
 };
 
 function enrich(m: MemberRaw, diet: Set<string>, workout: Set<string>): Member {
@@ -81,9 +145,24 @@ function enrich(m: MemberRaw, diet: Set<string>, workout: Set<string>): Member {
     status = !active || daysLeft < 0 ? "expired" : daysLeft <= 7 ? "expiring" : "active";
   }
   const age = m.date_of_birth ? Math.floor((Date.now() - new Date(m.date_of_birth).getTime()) / 31557600000) : null;
+  const memberStatus = (m.status === "inactive" ? "inactive" : "active") as "active" | "inactive";
+  const duesPaise = Math.max(0, Number(m.outstanding_balance_paise || 0));
+
   return {
-    ...m, status, daysLeft, age, plan: latest?.membership_plans?.name ?? null, planDurationDays: latest?.membership_plans?.duration_days ?? null, endDate: latest?.end_date ?? null,
-    hasDiet: diet.has(m.id), hasWorkout: workout.has(m.id), allTags: memberAllTags(m),
+    ...m,
+    status,
+    memberStatus,
+    daysLeft,
+    age,
+    plan: latest?.membership_plans?.name ?? null,
+    planId: latest?.membership_plans?.id ?? null,
+    planPricePaise: latest?.membership_plans?.price_paise ?? null,
+    planDurationDays: latest?.membership_plans?.duration_days ?? null,
+    endDate: latest?.end_date ?? null,
+    duesPaise,
+    hasDiet: diet.has(m.id),
+    hasWorkout: workout.has(m.id),
+    allTags: memberAllTags(m),
   };
 }
 
@@ -112,7 +191,7 @@ const NO_FILTERS: Filters = {
   ends: "any", diet: "any", workout: "any", birthday: false, missing: false,
   tags: [], tagMatch: "any",
 };
-type View = { id: string; name: string; tab: Tab; filters: Filters };
+type View = { id: string; name: string; tab: Tab; filters: Filters; pinned?: boolean };
 type SortKey = "newest" | "oldest" | "name" | "ending";
 
 const JOINED_LABEL = { any: "Any time", "7": "Last 7 days", "30": "Last 30 days", "90": "Last 3 months", month: "This month", year: "This year", custom: "Custom" } as const;
@@ -244,139 +323,79 @@ function TagFilterCards({
   }
 
   return (
-    <div className="mb-tag-grid">
-      {visibleGroups.map((g) => (
-        <div key={g.key} className="mb-tag-card">
-          <div className="mb-tag-card-title">{g.group.toUpperCase()}</div>
-          <div className="mb-tag-card-chips">
-            {g.items.map((item) => {
-              const on = selected.some((s) => s.toLowerCase() === item.toLowerCase());
-              return (
-                <button
-                  key={item}
-                  type="button"
-                  className="mb-tag-pill"
-                  data-selected={on}
-                  onClick={() => toggle(item)}
-                  aria-pressed={on}
-                >
-                  {on && <Check size={12} strokeWidth={2.8} style={{ marginRight: 4 }} />}
-                  {item}
-                </button>
-              );
-            })}
+    <div className="mb-tag-container">
+      {selected.length > 0 && (
+        <div className="mb-tag-selected-bar">
+          <span className="mb-tag-selected-label">Selected ({selected.length}):</span>
+          <div className="mb-tag-selected-chips">
+            {selected.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className="mb-tag-selected-chip"
+                onClick={() => toggle(item)}
+                title={`Remove ${item}`}
+              >
+                <span>{item}</span>
+                <X size={11} />
+              </button>
+            ))}
           </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function TagsPanel({
-  f,
-  set,
-  count,
-  onClear,
-  onClose,
-  onExport,
-}: {
-  f: Filters;
-  set: (p: Partial<Filters>) => void;
-  count: number;
-  onClear: () => void;
-  onClose: () => void;
-  onExport: () => void;
-}) {
-  const [tagSearch, setTagSearch] = useState("");
-  return (
-    <div className="mb-pop mb-pop--wide" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Tags filter">
-      <div className="mb-pop-head">
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <strong>Filter by Tags</strong>
-          {f.tags.length > 0 && <span className="mb-badge">{f.tags.length}</span>}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div className="mb-seg mb-seg--sm" style={{ width: 140 }}>
-            <button
-              type="button"
-              data-on={f.tagMatch === "any"}
-              onClick={() => set({ tagMatch: "any" })}
-              title="Match members having ANY of the selected tags"
-            >
-              Any tag
-            </button>
-            <button
-              type="button"
-              data-on={f.tagMatch === "all"}
-              onClick={() => set({ tagMatch: "all" })}
-              title="Match members having ALL selected tags"
-            >
-              All tags
-            </button>
-          </div>
-          <button type="button" className="mb-icon" onClick={onClose} aria-label="Close"><X size={15} /></button>
-        </div>
-      </div>
-
-      <div style={{ padding: "0 14px 10px" }}>
-        <div className="mb-search mb-search--block">
-          <Search size={14} />
-          <input
-            type="search"
-            value={tagSearch}
-            onChange={(e) => setTagSearch(e.target.value)}
-            placeholder="Search tags (e.g. PCOS, Diabetes, Bloating, Lactose)..."
-            aria-label="Search health tags"
-          />
-          {tagSearch && (
-            <button type="button" className="mb-x" onClick={() => setTagSearch("")} aria-label="Clear tag search">
-              <X size={12} />
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="mb-pop-body mb-pop-body--tags">
-        <TagFilterCards
-          selected={f.tags}
-          onChange={(next) => set({ tags: next })}
-          searchQuery={tagSearch}
-        />
-      </div>
-
-      <div className="mb-pop-foot">
-        <button
-          type="button"
-          className="ps-btn ps-btn--secondary ps-btn--sm"
-          onClick={onClear}
-          disabled={f.tags.length === 0}
-        >
-          Reset tags
-        </button>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button
             type="button"
-            className="ps-btn ps-btn--secondary ps-btn--sm"
-            onClick={() => {
-              onExport();
-              onClose();
-            }}
-            disabled={count === 0}
-            title="Export filtered members as CSV"
+            className="mb-tag-clear-btn"
+            onClick={() => onChange([])}
+            title="Deselect all tags"
           >
-            <Download size={14} /> Export ({count})
-          </button>
-          <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" onClick={onClose}>
-            Show {count} member{count === 1 ? "" : "s"}
+            Clear
           </button>
         </div>
+      )}
+
+      <div className="mb-tag-list">
+        {visibleGroups.map((g) => {
+          const groupActiveCount = g.items.filter((item) =>
+            selected.some((s) => s.toLowerCase() === item.toLowerCase())
+          ).length;
+
+          return (
+            <div key={g.key} className="mb-tag-row" data-active={groupActiveCount > 0}>
+              <div className="mb-tag-row-header">
+                <span className="mb-tag-row-title">{g.group}</span>
+                {groupActiveCount > 0 && (
+                  <span className="mb-tag-row-badge">{groupActiveCount}</span>
+                )}
+              </div>
+              <div className="mb-tag-row-chips">
+                {g.items.map((item) => {
+                  const on = selected.some((s) => s.toLowerCase() === item.toLowerCase());
+                  return (
+                    <button
+                      key={item}
+                      type="button"
+                      className="mb-tag-pill"
+                      data-selected={on}
+                      onClick={() => toggle(item)}
+                      aria-pressed={on}
+                    >
+                      {on && <Check size={11} strokeWidth={2.8} className="mb-tag-pill-check" />}
+                      <span>{item}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
 }
 
+type ExportFormat = "csv" | "xlsx" | "pdf";
+
 function FilterPanel({ f, set, plans, count, onClear, onClose, onExport }: {
-  f: Filters; set: (p: Partial<Filters>) => void; plans: string[]; count: number; onClear: () => void; onClose: () => void; onExport: () => void;
+  f: Filters; set: (p: Partial<Filters>) => void; plans: string[]; count: number; onClear: () => void; onClose: () => void; onExport: (format: ExportFormat) => void;
 }) {
   const [filterTab, setFilterTab] = useState<"general" | "tags">("general");
   const [tagSearch, setTagSearch] = useState("");
@@ -416,17 +435,44 @@ function FilterPanel({ f, set, plans, count, onClear, onClose, onExport }: {
                 {count} member{count === 1 ? "" : "s"} match current filters
               </div>
             </div>
-            <button
-              type="button"
-              className="ps-btn ps-btn--secondary ps-btn--sm"
-              onClick={() => {
-                onExport();
-                onClose();
-              }}
-              disabled={count === 0}
-            >
-              <Download size={13} /> Export CSV
-            </button>
+            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+              <button
+                type="button"
+                className="ps-btn ps-btn--secondary ps-btn--sm"
+                onClick={() => {
+                  onExport("csv");
+                  onClose();
+                }}
+                disabled={count === 0}
+                title="Export as CSV"
+              >
+                CSV
+              </button>
+              <button
+                type="button"
+                className="ps-btn ps-btn--secondary ps-btn--sm"
+                onClick={() => {
+                  onExport("xlsx");
+                  onClose();
+                }}
+                disabled={count === 0}
+                title="Export as Excel (.xlsx)"
+              >
+                Excel
+              </button>
+              <button
+                type="button"
+                className="ps-btn ps-btn--secondary ps-btn--sm"
+                onClick={() => {
+                  onExport("pdf");
+                  onClose();
+                }}
+                disabled={count === 0}
+                title="Export as PDF"
+              >
+                PDF
+              </button>
+            </div>
           </section>
 
           <section>
@@ -595,7 +641,7 @@ function FilterPanel({ f, set, plans, count, onClear, onClose, onExport }: {
             type="button"
             className="ps-btn ps-btn--secondary ps-btn--sm"
             onClick={() => {
-              onExport();
+              onExport("csv");
               onClose();
             }}
             disabled={count === 0}
@@ -615,6 +661,7 @@ function FilterPanel({ f, set, plans, count, onClear, onClose, onExport }: {
 // ── Page ─────────────────────────────────────────────────────────────────────
 
 export default function MembersPage() {
+  const router = useRouter();
   const params = useSearchParams();
   const { toast, show } = useToast();
   const [orgId, setOrgId] = useState("");
@@ -627,20 +674,26 @@ export default function MembersPage() {
     return p === "active" || p === "expiring" || p === "expired" || p === "none" ? p : "all";
   });
   const [search, setSearch] = useState("");
+  const [searchFocused, setSearchFocused] = useState(false);
+  const [searchSelectedIndex, setSearchSelectedIndex] = useState<number>(-1);
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sort, setSort] = useState<SortKey>("newest");
-  const [panel, setPanel] = useState<"filters" | "tags" | "sort" | "views" | null>(null);
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+  const [panel, setPanel] = useState<"filters" | "sort" | "views" | null>(null);
+  const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
+  const [bulkSubView, setBulkSubView] = useState<"main" | "export">("main");
   const [exportIncludeTags, setExportIncludeTags] = useState(true);
+  const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
   const [views, setViews] = useState<View[]>([]);
   const [viewId, setViewId] = useState<string | null>(null);
   const [naming, setNaming] = useState(false);
   const [viewName, setViewName] = useState("");
   const [page, setPage] = useState(0);
-  const [copySource, setCopySource] = useState<Member | null>(null);
+  const [renewMember, setRenewMember] = useState<Member | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null);
   const [changingStatusId, setChangingStatusId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+  const searchContainerRef = useRef<HTMLDivElement>(null);
   const PAGE = 25;
 
   const load = useCallback(async () => {
@@ -651,7 +704,7 @@ export default function MembersPage() {
     setOrgId(role.org_id); setUserId(user.id);
     const [mRes, dRes, wRes, v] = await Promise.all([
       supabase.from("members")
-        .select("id, full_name, phone, email, sex, date_of_birth, created_at, medical_conditions, gut_symptoms, food_intolerances, primary_goal, diet_type, memberships(id, status, end_date, membership_plans(name, duration_days))")
+        .select("id, full_name, phone, email, sex, date_of_birth, created_at, status, outstanding_balance_paise, medical_conditions, gut_symptoms, food_intolerances, primary_goal, diet_type, memberships(id, status, end_date, membership_plans(id, name, duration_days, price_paise))")
         .eq("org_id", role.org_id).order("created_at", { ascending: false }),
       supabase.from("member_diet_plans").select("member_id").eq("org_id", role.org_id).eq("status", "active"),
       supabase.from("member_workout_programs").select("member_id").eq("org_id", role.org_id).eq("status", "active"),
@@ -712,15 +765,89 @@ export default function MembersPage() {
     }
   }
 
+  // Click outside to dismiss search suggestions
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchContainerRef.current && !searchContainerRef.current.contains(e.target as Node)) {
+        setSearchFocused(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    setSearchSelectedIndex(-1);
+  }, [search]);
+
   // "/" focuses search, Esc closes popovers.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "/" && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) { e.preventDefault(); searchRef.current?.focus(); }
-      if (e.key === "Escape") { setPanel(null); setExportMenuOpen(false); }
+      if (e.key === "Escape") { setPanel(null); setBulkMenuOpen(false); setSearchFocused(false); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  const suggestions = useMemo(() => {
+    const query = search.trim().toLowerCase();
+    if (!query) return [];
+
+    const scored = members
+      .map((m) => {
+        const name = (m.full_name || "").toLowerCase();
+        const phone = (m.phone || "").toLowerCase();
+        const email = (m.email || "").toLowerCase();
+
+        let score = 0;
+        if (name.startsWith(query)) score = 100;
+        else if (name.split(/\s+/).some((w) => w.startsWith(query))) score = 80;
+        else if (name.includes(query)) score = 60;
+        else if (phone.startsWith(query) || phone.replace(/\D/g, "").startsWith(query.replace(/\D/g, ""))) score = 50;
+        else if (phone.includes(query)) score = 40;
+        else if (email.startsWith(query)) score = 30;
+        else if (email.includes(query)) score = 20;
+
+        return { member: m, score };
+      })
+      .filter((item) => item.score > 0);
+
+    scored.sort((a, b) => b.score - a.score || a.member.full_name.localeCompare(b.member.full_name));
+    return scored.slice(0, 6).map((item) => item.member);
+  }, [members, search]);
+
+  function handleSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "Escape") {
+      setSearchFocused(false);
+      return;
+    }
+
+    if (e.key === "ArrowDown") {
+      if (suggestions.length === 0) return;
+      e.preventDefault();
+      setSearchSelectedIndex((prev) => (prev < suggestions.length - 1 ? prev + 1 : 0));
+      return;
+    }
+
+    if (e.key === "ArrowUp") {
+      if (suggestions.length === 0) return;
+      e.preventDefault();
+      setSearchSelectedIndex((prev) => (prev > 0 ? prev - 1 : suggestions.length - 1));
+      return;
+    }
+
+    if (e.key === "Enter") {
+      if (searchSelectedIndex >= 0 && searchSelectedIndex < suggestions.length) {
+        e.preventDefault();
+        const target = suggestions[searchSelectedIndex];
+        setSearchFocused(false);
+        router.push(`/dashboard/members/${target.id}`);
+      } else {
+        setSearchFocused(false);
+      }
+    }
+  }
 
   const plans = useMemo(() => [...new Set(members.map((m) => m.plan).filter(Boolean) as string[])].sort(), [members]);
   const genders = useMemo(() => [...new Set(members.map((m) => (m.sex ?? "").toLowerCase()).filter(Boolean))].sort(), [members]);
@@ -755,21 +882,47 @@ export default function MembersPage() {
   function persistViews(next: View[]) { setViews(next); if (orgId && userId) savePref(orgId, userId, "members_views", next); }
   function saveView() {
     const name = viewName.trim(); if (!name) return;
-    const v: View = { id: crypto.randomUUID(), name, tab, filters };
-    persistViews([...views, v]); setViewId(v.id); setNaming(false); setViewName(""); show("View saved");
+    const v: View = { id: crypto.randomUUID(), name, tab, filters, pinned: false };
+    persistViews([...views, v]); setViewId(v.id); setNaming(false); setViewName(""); show("Filter saved");
   }
+  const MAX_PINNED_FILTERS = 3;
 
-  function exportCSV(target: "filtered" | "all" = "filtered", includeTags: boolean = true) {
+  function togglePinView(id: string) {
+    const target = views.find((v) => v.id === id);
+    if (!target) return;
+    if (!target.pinned) {
+      const currentPinned = views.filter((v) => v.pinned).length;
+      if (currentPinned >= MAX_PINNED_FILTERS) {
+        show(`You can only pin up to ${MAX_PINNED_FILTERS} filters`, "error");
+        return;
+      }
+    }
+    const next = views.map((v) => (v.id === id ? { ...v, pinned: !v.pinned } : v));
+    persistViews(next);
+  }
+  const pinnedViews = useMemo(() => views.filter((v) => v.pinned).slice(0, MAX_PINNED_FILTERS), [views]);
+
+  function getExportDataset(target: "filtered" | "all" = "filtered", includeTags: boolean = true) {
     const dataRows = target === "all" ? members : rows;
-    const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const head = ["Name", "Phone", "Email", "Gender", "Age", "Plan", "Plan ends", "Status", "Diet plan", "Workout", "Joined"];
+    const head = ["Name", "Phone", "Email", "Gender", "Age", "Plan", "Price", "Dues", "Plan ends", "Status", "Diet plan", "Workout", "Joined"];
     if (includeTags) {
       head.push("Medical Conditions", "Gut Symptoms", "Food Intolerances", "All Tags", "Primary Goal", "Diet Type");
     }
-    const lines = [head.map(esc).join(","), ...dataRows.map((m) => {
-      const line = [
-        m.full_name, m.phone, m.email, m.sex ? cap(m.sex) : "", m.age, m.plan, m.endDate?.slice(0, 10), STATUS[m.status].label,
-        m.hasDiet ? "Yes" : "No", m.hasWorkout ? "Yes" : "No", m.created_at.slice(0, 10),
+    const rawRows = dataRows.map((m) => {
+      const line: (string | number)[] = [
+        m.full_name || "",
+        m.phone || "",
+        m.email || "",
+        m.sex ? cap(m.sex) : "",
+        m.age ?? "",
+        m.plan || "",
+        m.planPricePaise ? (m.planPricePaise / 100).toFixed(0) : "0",
+        m.duesPaise ? (m.duesPaise / 100).toFixed(0) : "0",
+        m.endDate?.slice(0, 10) || "",
+        STATUS[m.status]?.label || m.status,
+        m.hasDiet ? "Yes" : "No",
+        m.hasWorkout ? "Yes" : "No",
+        m.created_at ? m.created_at.slice(0, 10) : "",
       ];
       if (includeTags) {
         line.push(
@@ -781,14 +934,116 @@ export default function MembersPage() {
           m.diet_type ? m.diet_type.replace(/_/g, " ") : ""
         );
       }
-      return line.map(esc).join(",");
-    })];
-    const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = `members-${target}-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    show(`Exported ${dataRows.length} member${dataRows.length === 1 ? "" : "s"} to CSV`);
+      return line;
+    });
+    return { dataRows, head, rawRows };
+  }
+
+  function exportData(format: ExportFormat, target: "filtered" | "all" = "filtered", includeTags: boolean = true) {
+    const { dataRows, head, rawRows } = getExportDataset(target, includeTags);
+    if (dataRows.length === 0) {
+      show("No members to export");
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    const filename = `members-${target}-${today}`;
+
+    try {
+      if (format === "csv") {
+        const esc = (v: unknown) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+        const lines = [
+          head.map(esc).join(","),
+          ...rawRows.map((r) => r.map(esc).join(",")),
+        ];
+        const blob = new Blob(["\uFEFF" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `${filename}.csv`;
+        a.click();
+        show(`Exported ${dataRows.length} member${dataRows.length === 1 ? "" : "s"} to CSV`);
+      } else if (format === "xlsx") {
+        const ws = XLSX.utils.aoa_to_sheet([head, ...rawRows]);
+        const colWidths = head.map((col, idx) => {
+          let maxLen = col.length;
+          for (let i = 0; i < Math.min(rawRows.length, 50); i++) {
+            const val = String(rawRows[i][idx] || "");
+            if (val.length > maxLen) maxLen = val.length;
+          }
+          return { wch: Math.min(Math.max(maxLen + 2, 10), 40) };
+        });
+        ws["!cols"] = colWidths;
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Members");
+        const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+        const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = `${filename}.xlsx`;
+        a.click();
+        show(`Exported ${dataRows.length} member${dataRows.length === 1 ? "" : "s"} to Excel (.xlsx)`);
+      } else if (format === "pdf") {
+        const doc = new jsPDF({
+          orientation: "landscape",
+          unit: "pt",
+          format: "a4",
+        });
+
+        doc.setFontSize(16);
+        doc.setTextColor(30, 41, 59);
+        doc.text("Members Directory", 36, 36);
+
+        doc.setFontSize(9);
+        doc.setTextColor(100, 116, 139);
+        doc.text(
+          `Exported on: ${new Date().toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })} · Scope: ${target === "all" ? "All members" : "Filtered list"} (${dataRows.length} total)`,
+          36,
+          52
+        );
+
+        autoTable(doc, {
+          head: [head],
+          body: rawRows,
+          startY: 65,
+          margin: { left: 36, right: 36, bottom: 36 },
+          theme: "grid",
+          styles: {
+            fontSize: includeTags ? 6.5 : 8,
+            cellPadding: 3,
+            overflow: "linebreak",
+            valign: "middle",
+          },
+          headStyles: {
+            fillColor: [79, 70, 229],
+            textColor: [255, 255, 255],
+            fontStyle: "bold",
+            fontSize: includeTags ? 7 : 8.5,
+          },
+          alternateRowStyles: {
+            fillColor: [248, 250, 252],
+          },
+          didDrawPage: (data: any) => {
+            const pageCount = (doc as any).internal?.getNumberOfPages ? (doc as any).internal.getNumberOfPages() : 1;
+            doc.setFontSize(8);
+            doc.setTextColor(148, 163, 184);
+            doc.text(
+              `Page ${data.pageNumber} of ${pageCount}`,
+              doc.internal.pageSize.getWidth() - 80,
+              doc.internal.pageSize.getHeight() - 18
+            );
+          },
+        });
+
+        doc.save(`${filename}.pdf`);
+        show(`Exported ${dataRows.length} member${dataRows.length === 1 ? "" : "s"} to PDF`);
+      }
+    } catch (err: any) {
+      console.error("Export error:", err);
+      show(`Export failed: ${err?.message || "Unknown error"}`);
+    }
+  }
+
+  function exportCSV(target: "filtered" | "all" = "filtered", includeTags: boolean = true) {
+    exportData("csv", target, includeTags);
   }
 
   const TABS: { key: Tab; label: string }[] = [
@@ -798,7 +1053,7 @@ export default function MembersPage() {
   const dirty = tab !== "all" || chips.length > 0;
 
   return (
-    <div className="ps-page mb" onClick={() => { setPanel(null); setExportMenuOpen(false); }}>
+    <div className="ps-page mb" onClick={() => { setPanel(null); setBulkMenuOpen(false); }}>
       <style>{CSS}</style>
 
       <header className="mb-head">
@@ -813,67 +1068,154 @@ export default function MembersPage() {
           <div className="mb-anchor" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
-              className="ps-btn ps-btn--secondary ps-btn--sm mb-export-btn"
-              onClick={() => setExportMenuOpen((v) => !v)}
-              disabled={loading || members.length === 0}
+              className="ps-btn ps-btn--secondary ps-btn--sm mb-bulk-btn"
+              onClick={() => {
+                setBulkMenuOpen((v) => {
+                  const next = !v;
+                  if (next) setBulkSubView("main");
+                  return next;
+                });
+              }}
               aria-haspopup="true"
-              aria-expanded={exportMenuOpen}
-              title="Export members as CSV"
+              aria-expanded={bulkMenuOpen}
+              title="Bulk transfer (Import or Export members)"
             >
-              <Download size={15} />
-              <span>Export</span>
-              <ChevronDown size={13} className={`mb-export-caret ${exportMenuOpen ? "mb-export-caret--up" : ""}`} />
+              <ArrowLeftRight size={14} />
+              <span>Bulk transfer</span>
+              <ChevronDown size={13} className={`mb-export-caret ${bulkMenuOpen ? "mb-export-caret--up" : ""}`} />
             </button>
 
-            {exportMenuOpen && (
-              <div className="mb-menu mb-menu--right mb-export-menu" role="menu">
-                <div className="mb-export-menu-head">
-                  <strong>Export options</strong>
-                  <span>CSV format</span>
-                </div>
+            {bulkMenuOpen && (
+              <div className="mb-menu mb-menu--right mb-bulk-menu" role="menu">
+                {bulkSubView === "main" ? (
+                  <>
+                    <div className="mb-bulk-menu-head">
+                      <strong>Bulk transfer</strong>
+                    </div>
 
-                <label className="mb-export-check">
-                  <input
-                    type="checkbox"
-                    checked={exportIncludeTags}
-                    onChange={(e) => setExportIncludeTags(e.target.checked)}
-                  />
-                  <span>Include tags & health data</span>
-                </label>
+                    <button
+                      type="button"
+                      className="mb-bulk-item"
+                      onClick={() => {
+                        setBulkMenuOpen(false);
+                        setImportOpen(true);
+                      }}
+                    >
+                      <div className="mb-bulk-item-icon mb-bulk-item-icon--import">
+                        <Upload size={15} />
+                      </div>
+                      <div className="mb-bulk-item-text">
+                        <strong>Import</strong>
+                        <small>Upload CSV, Excel, or JSON</small>
+                      </div>
+                    </button>
 
-                <div className="mb-menu-sep" />
+                    <button
+                      type="button"
+                      className="mb-bulk-item"
+                      onClick={() => setBulkSubView("export")}
+                    >
+                      <div className="mb-bulk-item-icon mb-bulk-item-icon--export">
+                        <Download size={15} />
+                      </div>
+                      <div className="mb-bulk-item-text">
+                        <strong>Export</strong>
+                        <small>Download directory (CSV, Excel, PDF)</small>
+                      </div>
+                      <ChevronRight size={14} className="mb-bulk-arrow" />
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <div className="mb-export-menu-head">
+                      <button
+                        type="button"
+                        className="mb-bulk-back-btn"
+                        onClick={() => setBulkSubView("main")}
+                        title="Back to options"
+                      >
+                        <ChevronLeft size={13} />
+                        <span>Back</span>
+                      </button>
+                      <span className="mb-export-format-badge">{exportFormat.toUpperCase()}</span>
+                    </div>
 
-                <button
-                  type="button"
-                  className="mb-export-opt"
-                  disabled={rows.length === 0}
-                  onClick={() => {
-                    setExportMenuOpen(false);
-                    exportCSV("filtered", exportIncludeTags);
-                  }}
-                >
-                  <div className="mb-export-opt-text">
-                    <strong>Filtered list ({rows.length})</strong>
-                    <small>Matching current search and filters</small>
-                  </div>
-                  <Download size={14} className="mb-export-opt-icon" />
-                </button>
+                    <div className="mb-export-format-box">
+                      <div className="mb-export-format-label">Format</div>
+                      <div className="mb-export-format-pills">
+                        <button
+                          type="button"
+                          className={`mb-export-format-pill ${exportFormat === "csv" ? "active" : ""}`}
+                          onClick={() => setExportFormat("csv")}
+                        >
+                          <FileText size={12} />
+                          <span>CSV</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`mb-export-format-pill ${exportFormat === "xlsx" ? "active" : ""}`}
+                          onClick={() => setExportFormat("xlsx")}
+                        >
+                          <FileSpreadsheet size={12} />
+                          <span>Excel (.xlsx)</span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`mb-export-format-pill ${exportFormat === "pdf" ? "active" : ""}`}
+                          onClick={() => setExportFormat("pdf")}
+                        >
+                          <Download size={12} />
+                          <span>PDF</span>
+                        </button>
+                      </div>
+                    </div>
 
-                <button
-                  type="button"
-                  className="mb-export-opt"
-                  disabled={members.length === 0}
-                  onClick={() => {
-                    setExportMenuOpen(false);
-                    exportCSV("all", exportIncludeTags);
-                  }}
-                >
-                  <div className="mb-export-opt-text">
-                    <strong>All members ({members.length})</strong>
-                    <small>Entire gym directory</small>
-                  </div>
-                  <Download size={14} className="mb-export-opt-icon" />
-                </button>
+                    <label className="mb-export-check">
+                      <input
+                        type="checkbox"
+                        checked={exportIncludeTags}
+                        onChange={(e) => setExportIncludeTags(e.target.checked)}
+                      />
+                      <span>Include tags & health data</span>
+                    </label>
+
+                    <div className="mb-menu-sep" />
+
+                    <button
+                      type="button"
+                      className="mb-export-opt"
+                      disabled={rows.length === 0}
+                      onClick={() => {
+                        setBulkMenuOpen(false);
+                        setBulkSubView("main");
+                        exportData(exportFormat, "filtered", exportIncludeTags);
+                      }}
+                    >
+                      <div className="mb-export-opt-text">
+                        <strong>Filtered list ({rows.length})</strong>
+                        <small>Matching current search & filters as {exportFormat.toUpperCase()}</small>
+                      </div>
+                      <Download size={14} className="mb-export-opt-icon" />
+                    </button>
+
+                    <button
+                      type="button"
+                      className="mb-export-opt"
+                      disabled={members.length === 0}
+                      onClick={() => {
+                        setBulkMenuOpen(false);
+                        setBulkSubView("main");
+                        exportData(exportFormat, "all", exportIncludeTags);
+                      }}
+                    >
+                      <div className="mb-export-opt-text">
+                        <strong>All members ({members.length})</strong>
+                        <small>Entire gym directory as {exportFormat.toUpperCase()}</small>
+                      </div>
+                      <Download size={14} className="mb-export-opt-icon" />
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -884,22 +1226,138 @@ export default function MembersPage() {
       <div className="mb-card">
         {/* Status tabs */}
         <nav className="mb-tabs" role="tablist">
-          {TABS.map((t) => (
-            <button key={t.key} type="button" role="tab" data-tone={t.key} aria-selected={tab === t.key} onClick={() => { setTab(t.key); setViewId(null); }}>
-              {t.key !== "all" && tab === t.key && <span className={`mb-dot mb-dot--${t.key}`} />}
-              {t.label}
-              <span className="mb-count">{loading ? "–" : counts[t.key]}</span>
-            </button>
-          ))}
+          {TABS.map((t) => {
+            const isSelected = tab === t.key;
+            return (
+              <button
+                key={t.key}
+                type="button"
+                role="tab"
+                data-tone={t.key}
+                aria-selected={isSelected}
+                onClick={() => { setTab(t.key); setViewId(null); }}
+              >
+                <span className={`mb-tab-radio ${isSelected ? "mb-tab-radio--checked" : ""}`} aria-hidden>
+                  {isSelected && <span className="mb-tab-radio-dot" />}
+                </span>
+                <span>{t.label}</span>
+                <span className="mb-count">{loading ? "–" : counts[t.key]}</span>
+              </button>
+            );
+          })}
         </nav>
 
         {/* Toolbar */}
         <div className="mb-toolbar">
-          <label className="mb-search">
-            <Search size={15} />
-            <input ref={searchRef} type="search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, phone or email" aria-label="Search members" />
-            {search ? <button type="button" className="mb-x" onClick={() => setSearch("")} aria-label="Clear search"><X size={12} /></button> : <kbd>/</kbd>}
-          </label>
+          <div className="mb-search-container" ref={searchContainerRef}>
+            <label className="mb-search">
+              <Search size={15} />
+              <input
+                ref={searchRef}
+                type="search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onFocus={() => setSearchFocused(true)}
+                onKeyDown={handleSearchKeyDown}
+                placeholder="Search name, phone or email"
+                aria-label="Search members"
+                autoComplete="off"
+              />
+              {search ? (
+                <button
+                  type="button"
+                  className="mb-x"
+                  onClick={() => {
+                    setSearch("");
+                    searchRef.current?.focus();
+                  }}
+                  aria-label="Clear search"
+                >
+                  <X size={12} />
+                </button>
+              ) : (
+                <kbd>/</kbd>
+              )}
+            </label>
+
+            {/* Suggestions dropdown */}
+            {searchFocused && search.trim().length > 0 && (
+              <div className="mb-search-dropdown" role="listbox">
+                <div className="mb-search-dropdown-head">
+                  <span>Suggested members ({suggestions.length})</span>
+                  <span className="mb-search-dropdown-hints">↑↓ to navigate · ↵ to open</span>
+                </div>
+
+                {suggestions.length > 0 ? (
+                  <div className="mb-search-dropdown-list">
+                    {suggestions.map((m, idx) => {
+                      const isSelected = searchSelectedIndex === idx;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          role="option"
+                          aria-selected={isSelected}
+                          className="mb-search-sug-item"
+                          data-selected={isSelected}
+                          onMouseEnter={() => setSearchSelectedIndex(idx)}
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setSearchFocused(false);
+                            router.push(`/dashboard/members/${m.id}`);
+                          }}
+                        >
+                          <Avatar name={m.full_name} size={32} />
+                          <div className="mb-search-sug-main">
+                            <div className="mb-search-sug-row1">
+                              <span className="mb-search-sug-name">
+                                <HighlightText text={m.full_name} highlight={search} />
+                              </span>
+                              {m.plan && <span className="mb-search-sug-plan">{m.plan}</span>}
+                              <span className={`mb-search-sug-status mb-search-sug-status--${m.memberStatus === "inactive" ? "inactive" : m.status}`}>
+                                {m.memberStatus === "inactive" ? "Inactive" : m.status === "active" ? "Active" : m.status === "expiring" ? "Expiring" : m.status === "expired" ? "Expired" : "No plan"}
+                              </span>
+                            </div>
+                            <div className="mb-search-sug-sub">
+                              {m.phone && (
+                                <span>
+                                  <HighlightText text={m.phone} highlight={search} />
+                                </span>
+                              )}
+                              {m.phone && m.email && <span>·</span>}
+                              {m.email && (
+                                <span>
+                                  <HighlightText text={m.email} highlight={search} />
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <ChevronRight size={14} className="mb-search-sug-arrow" />
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="mb-search-dropdown-empty">
+                    <Users size={16} />
+                    <span>No members found matching &quot;{search}&quot;</span>
+                  </div>
+                )}
+
+                <button
+                  type="button"
+                  className="mb-search-dropdown-foot"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    setSearchFocused(false);
+                  }}
+                >
+                  <span>Filter members table for &quot;{search}&quot;</span>
+                  <span className="mb-count">{base.length} result{base.length === 1 ? "" : "s"}</span>
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="mb-anchor" onClick={(e) => e.stopPropagation()}>
             <button type="button" className="mb-tool" data-on={panel === "filters" || chips.some((c) => !c.key.startsWith("tag-"))} onClick={() => setPanel((p) => (p === "filters" ? null : "filters"))}>
@@ -908,18 +1366,7 @@ export default function MembersPage() {
             {panel === "filters" && (
               <FilterPanel f={filters} set={setF} plans={plans} count={rows.length}
                 onClear={() => { setFilters(NO_FILTERS); setViewId(null); }} onClose={() => setPanel(null)}
-                onExport={() => exportCSV("filtered", exportIncludeTags)} />
-            )}
-          </div>
-
-          <div className="mb-anchor" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="mb-tool" data-on={panel === "tags" || filters.tags.length > 0} onClick={() => setPanel((p) => (p === "tags" ? null : "tags"))}>
-              <Tag size={15} /> Tags{filters.tags.length > 0 && <span className="mb-badge">{filters.tags.length}</span>}
-            </button>
-            {panel === "tags" && (
-              <TagsPanel f={filters} set={setF} count={rows.length}
-                onClear={() => setF({ tags: [] })} onClose={() => setPanel(null)}
-                onExport={() => exportCSV("filtered", exportIncludeTags)} />
+                onExport={(fmt) => exportData(fmt, "filtered", exportIncludeTags)} />
             )}
           </div>
 
@@ -934,28 +1381,80 @@ export default function MembersPage() {
             )}
           </div>
 
+          {/* Pinned filter pills */}
+          {pinnedViews.length > 0 && (
+            <div className="mb-pinned-pills">
+              {pinnedViews.map((pv) => {
+                const isSelected = viewId === pv.id;
+                return (
+                  <button
+                    key={pv.id}
+                    type="button"
+                    className="mb-pinned-pill"
+                    data-on={isSelected}
+                    onClick={() => {
+                      if (isSelected) {
+                        setViewId(null);
+                      } else {
+                        setTab(pv.tab);
+                        setFilters(pv.filters);
+                        setViewId(pv.id);
+                      }
+                    }}
+                    title={`Apply "${pv.name}" filter`}
+                  >
+                    <Pin size={11} className="mb-pinned-pin" />
+                    <span>{pv.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           <div className="mb-anchor" style={{ marginLeft: "auto" }} onClick={(e) => e.stopPropagation()}>
             <button type="button" className="mb-tool" data-on={!!viewId} onClick={() => setPanel((p) => (p === "views" ? null : "views"))}>
-              <Bookmark size={15} /> {views.find((v) => v.id === viewId)?.name ?? "Saved views"}
+              <Bookmark size={15} /> {views.find((v) => v.id === viewId)?.name ?? "Saved filters"}
             </button>
             {panel === "views" && (
-              <div className="mb-menu mb-menu--right" style={{ width: 260 }}>
+              <div className="mb-menu mb-menu--right" style={{ width: 270 }}>
                 {views.length === 0 && !naming && <div className="mb-muted" style={{ padding: "8px 10px", fontSize: 12.5 }}>Save a tab and filter combo you use often, like “Expiring, no diet plan”.</div>}
-                {views.map((v) => (
-                  <div key={v.id} className="mb-view" data-on={viewId === v.id}>
-                    <button type="button" onClick={() => { setTab(v.tab); setFilters(v.filters); setViewId(v.id); setPanel(null); }}>{v.name}</button>
-                    <button type="button" className="mb-icon" aria-label={`Delete ${v.name}`} onClick={() => { persistViews(views.filter((x) => x.id !== v.id)); if (viewId === v.id) setViewId(null); }}><Trash2 size={13} /></button>
+                {views.length > 0 && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px 4px", fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                    <span>Filters ({views.length})</span>
+                    <span>{pinnedViews.length}/{MAX_PINNED_FILTERS} Pinned</span>
                   </div>
-                ))}
+                )}
+                {views.map((v) => {
+                  const atLimit = !v.pinned && pinnedViews.length >= MAX_PINNED_FILTERS;
+                  return (
+                    <div key={v.id} className="mb-view" data-on={viewId === v.id}>
+                      <button type="button" onClick={() => { setTab(v.tab); setFilters(v.filters); setViewId(v.id); setPanel(null); }}>{v.name}</button>
+                      <button
+                        type="button"
+                        className="mb-icon"
+                        aria-label={v.pinned ? `Unpin ${v.name}` : `Pin ${v.name}`}
+                        title={v.pinned ? "Unpin filter" : atLimit ? "Maximum 3 pinned filters reached" : "Pin filter to toolbar"}
+                        style={atLimit ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          togglePinView(v.id);
+                        }}
+                      >
+                        <Pin size={13} style={{ fill: v.pinned ? "var(--accent, #0a84ff)" : "none", color: v.pinned ? "var(--accent, #0a84ff)" : "var(--text-tertiary)" }} />
+                      </button>
+                      <button type="button" className="mb-icon" aria-label={`Delete ${v.name}`} onClick={() => { persistViews(views.filter((x) => x.id !== v.id)); if (viewId === v.id) setViewId(null); }}><Trash2 size={13} /></button>
+                    </div>
+                  );
+                })}
                 <div className="mb-menu-sep" />
                 {naming ? (
                   <div style={{ display: "flex", gap: 6, padding: 4 }}>
-                    <input className="mb-input" autoFocus placeholder="View name" value={viewName} maxLength={40}
+                    <input className="mb-input" autoFocus placeholder="Filter name" value={viewName} maxLength={40}
                       onChange={(e) => setViewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveView(); if (e.key === "Escape") setNaming(false); }} />
                     <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" disabled={!viewName.trim()} onClick={saveView}>Save</button>
                   </div>
                 ) : (
-                  <button type="button" disabled={!dirty} onClick={() => setNaming(true)}><Plus size={14} /> Save current view</button>
+                  <button type="button" disabled={!dirty} onClick={() => setNaming(true)}><Plus size={14} /> Save current filter</button>
                 )}
               </div>
             )}
@@ -975,13 +1474,31 @@ export default function MembersPage() {
         {/* Table */}
         <div className="mb-table" role="table">
           <div className="mb-tr mb-th" role="row">
-            <span>Member</span><span>Contact</span><span>Membership</span><span>Status</span><span>Programs</span><span />
+            <span>Member</span>
+            <span>Current Plan</span>
+            <span>Status</span>
+            <span>Amount</span>
+            <span style={{ textAlign: "right" }}>Action</span>
           </div>
 
           {loading ? Array.from({ length: 6 }).map((_, i) => (
             <div key={i} className="mb-tr">
-              <span className="mb-who"><Skeleton w={36} h={36} r={18} /><span style={{ display: "grid", gap: 6 }}><Skeleton w={140} h={13} /><Skeleton w={80} h={11} /></span></span>
-              <Skeleton w={120} h={12} /><Skeleton w={90} h={12} /><Skeleton w={64} h={22} r={11} /><Skeleton w={50} h={22} r={11} /><span />
+              <span className="mb-who">
+                <Skeleton w={36} h={36} r={18} />
+                <span style={{ display: "grid", gap: 6 }}>
+                  <Skeleton w={140} h={13} />
+                  <Skeleton w={90} h={11} />
+                </span>
+              </span>
+              <div style={{ display: "grid", gap: 6 }}>
+                <Skeleton w={110} h={13} />
+                <Skeleton w={80} h={11} />
+              </div>
+              <Skeleton w={38} h={22} r={11} />
+              <Skeleton w={65} h={14} />
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <Skeleton w={72} h={28} r={8} />
+              </div>
             </div>
           )) : rows.length === 0 ? (
             <div className="mb-empty">
@@ -993,99 +1510,112 @@ export default function MembersPage() {
                 : <button type="button" className="ps-btn ps-btn--secondary ps-btn--sm" onClick={clearAll}>Clear filters</button>}
             </div>
           ) : pageRows.map((m) => {
-            const meta = [m.sex && cap(m.sex), m.age !== null && `${m.age} yrs`].filter(Boolean).join(" · ");
+            const isActive = m.memberStatus !== "inactive" && (m.status === "active" || m.status === "expiring");
+            const isBusy = changingStatusId === m.id;
+
             return (
-              <Link key={m.id} href={`/dashboard/members/${m.id}`} className="mb-tr mb-row" role="row" data-status={m.status}>
+              <Link key={m.id} href={`/dashboard/members/${m.id}`} className="mb-tr mb-row" role="row" data-status={isActive ? "active" : "expired"}>
+                {/* 1. Name | Age | Sex | WA icon */}
                 <span className="mb-who">
                   <Avatar name={m.full_name} size={36} />
                   <span className="mb-text">
-                    <strong>{m.full_name}</strong>
-                    <small>{meta || `Joined ${formatDate(m.created_at)}`}</small>
-                    {m.allTags.length > 0 && (
-                      <span className="mb-row-tags">
-                        {m.allTags.slice(0, 3).map((t) => (
-                          <span
-                            key={t}
-                            className="mb-mini-tag"
-                            data-match={filters.tags.some((ft) => ft.toLowerCase() === t.toLowerCase())}
-                          >
-                            {t}
-                          </span>
-                        ))}
-                        {m.allTags.length > 3 && (
-                          <span className="mb-mini-tag-more">+{m.allTags.length - 3}</span>
-                        )}
-                      </span>
-                    )}
-                    <small className="mb-show-sm">{[m.plan, m.endDate && `${m.daysLeft !== null && m.daysLeft < 0 ? "ended" : "ends"} ${formatDate(m.endDate)}`, m.phone].filter(Boolean).join(" · ")}</small>
+                    <div className="mb-name-row">
+                      <strong>{m.full_name}</strong>
+                      {m.phone ? (
+                        <a
+                          href={waLink(m.phone)!}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="mb-wa-icon"
+                          title={`Chat with ${m.full_name} on WhatsApp (${m.phone})`}
+                          aria-label={`Chat with ${m.full_name} on WhatsApp`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <WhatsAppIcon size={14} />
+                        </a>
+                      ) : (
+                        <span
+                          className="mb-wa-icon mb-wa-icon--disabled"
+                          title="No phone number"
+                          aria-label="No phone number for WhatsApp"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                        >
+                          <WhatsAppIcon size={14} />
+                        </span>
+                      )}
+                    </div>
+                    <small className="mb-details-meta">
+                      <span>{m.age !== null ? `${m.age} yrs` : "Age: —"}</span>
+                      <span className="mb-details-sep">|</span>
+                      <span>{m.sex ? cap(m.sex) : "Sex: —"}</span>
+                    </small>
+                    <small className="mb-show-sm">
+                      {[m.plan, m.endDate && `Exp ${formatDate(m.endDate)}`, m.planPricePaise ? formatINR(m.planPricePaise) : null].filter(Boolean).join(" · ")}
+                    </small>
                   </span>
                 </span>
+
+                {/* 2. current membership plan | Exp date */}
                 <span className="mb-text mb-hide-sm">
-                  <span>{m.phone ?? <span className="mb-muted">No phone</span>}</span>
-                  <small>{m.email ?? ""}</small>
+                  <span>{m.plan ? <span className="mb-plan">{m.plan}</span> : <span className="mb-muted">No plan</span>}</span>
+                  <small className="mb-exp-line">
+                    {m.endDate ? (
+                      <>
+                        <span>Exp: {formatDate(m.endDate, { year: true })}</span>
+                        {m.daysLeft !== null && (
+                          <span className={`mb-exp-badge mb-exp-badge--${m.daysLeft < 0 ? "expired" : m.daysLeft <= 7 ? "warn" : "ok"}`}>
+                            {m.daysLeft < 0 ? "Ended" : m.daysLeft === 0 ? "Today" : `${m.daysLeft}d left`}
+                          </span>
+                        )}
+                      </>
+                    ) : (
+                      <span className="mb-muted">—</span>
+                    )}
+                  </small>
                 </span>
-                <span className="mb-text mb-hide-sm">
-                  <span>{m.plan ? <span className="mb-plan">{m.plan}</span> : <span className="mb-muted">—</span>}</span>
-                  <small>{m.endDate ? `${m.daysLeft !== null && m.daysLeft < 0 ? "Ended" : "Ends"} ${formatDate(m.endDate)}` : ""}</small>
-                </span>
+
+                {/* 3. Status - active & inactive (toggle only) */}
                 <div className="mb-status-cell" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
                   <button
                     type="button"
-                    className={`mb-pill mb-pill--btn ${STATUS[m.status].cls}`}
-                    disabled={changingStatusId === m.id}
+                    role="switch"
+                    aria-checked={isActive}
+                    disabled={isBusy}
+                    className={`mb-toggle ${isActive ? "mb-toggle--on" : "mb-toggle--off"}`}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      setStatusMenuId(statusMenuId === m.id ? null : m.id);
+                      handleQuickStatusChange(m, isActive ? "inactive" : "active");
                     }}
-                    title="Click to change active/inactive status without opening member page"
-                    aria-label={`Change status for ${m.full_name}`}
+                    title={`Status: ${isActive ? "Active" : "Inactive"}. Click to toggle.`}
+                    aria-label={`Toggle active status for ${m.full_name}`}
                   >
-                    {changingStatusId === m.id ? (
-                      <Loader2 size={11} className="ps-spin" />
-                    ) : (
-                      <span className="mb-status-dot" />
-                    )}
-                    <span>
-                      {m.status === "expiring" && m.daysLeft !== null
-                        ? (m.daysLeft === 0 ? "Ends today" : `${m.daysLeft}d left`)
-                        : STATUS[m.status].label}
+                    <span className="mb-toggle-thumb">
+                      {isBusy && <Loader2 size={9} className="ps-spin" />}
                     </span>
-                    <ChevronDown size={11} className="mb-status-caret" />
                   </button>
-                  {statusMenuId === m.id && (
-                    <div className="mb-status-menu" role="menu" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className={m.status === "active" || m.status === "expiring" ? "active" : ""}
-                        onClick={() => handleQuickStatusChange(m, "active")}
-                      >
-                        <span className="mb-dot mb-dot--green" />
-                        <span>Active</span>
-                        {(m.status === "active" || m.status === "expiring") && <Check size={12} className="mb-check" />}
-                      </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className={m.status === "expired" || m.status === "none" ? "active" : ""}
-                        onClick={() => handleQuickStatusChange(m, "inactive")}
-                      >
-                        <span className="mb-dot mb-dot--grey" />
-                        <span>Inactive</span>
-                        {(m.status === "expired" || m.status === "none") && <Check size={12} className="mb-check" />}
-                      </button>
-                    </div>
-                  )}
                 </div>
-                <span className="mb-progs mb-hide-sm">
-                  <span title={m.hasDiet ? "Has an active diet plan" : "No diet plan"} data-on={m.hasDiet}><Salad size={14} /></span>
-                  <span title={m.hasWorkout ? "Has an active workout" : "No workout"} data-on={m.hasWorkout}><Dumbbell size={14} /></span>
+
+                {/* 4. Amount */}
+                <span className="mb-text mb-hide-sm">
+                  <span className="mb-price-val">{m.planPricePaise ? formatINR(m.planPricePaise) : "—"}</span>
                 </span>
-                <span className="mb-actions">
-                  <button type="button" className="mb-icon" title="Copy a plan to another member" aria-label={`Copy a plan from ${m.full_name}`}
-                    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setCopySource(m); }}><Copy size={15} /></button>
-                  <ChevronRight size={16} className="mb-chev" />
+
+                {/* 5. Action - Renew */}
+                <span className="mb-actions" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
+                  <button
+                    type="button"
+                    className="ps-btn ps-btn--primary ps-btn--sm mb-renew-btn"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setRenewMember(m);
+                    }}
+                    title={`Renew membership for ${m.full_name}`}
+                  >
+                    <RefreshCw size={12} />
+                    <span>Renew</span>
+                  </button>
                 </span>
               </Link>
             );
@@ -1106,10 +1636,30 @@ export default function MembersPage() {
         )}
       </div>
 
-      <CopyPlanSheet source={copySource} members={members} orgId={orgId}
-        onClose={() => setCopySource(null)}
-        onDone={(msg) => { setCopySource(null); show(msg); load(); }}
-        onError={(msg) => show(msg, "error")} />
+      <RenewalSheet
+        member={renewMember}
+        orgId={orgId}
+        currentPlanId={renewMember?.planId}
+        onClose={() => setRenewMember(null)}
+        onDone={(msg) => {
+          setRenewMember(null);
+          show(msg);
+          load();
+        }}
+        onError={(msg) => show(msg, "error")}
+      />
+
+      <ImportMembersSheet
+        isOpen={importOpen}
+        orgId={orgId}
+        onClose={() => setImportOpen(false)}
+        onDone={(count) => {
+          setImportOpen(false);
+          show(`Imported ${count} member${count === 1 ? "" : "s"} successfully!`);
+          load();
+        }}
+        onError={(msg) => show(msg, "error")}
+      />
       {toast}
     </div>
   );
@@ -1122,29 +1672,84 @@ const CSS = `
 .mb-head h1 { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; margin: 0; }
 .mb-head p { font-size: 13.5px; color: var(--text-secondary); margin: 2px 0 0; }
 .mb-head-actions { display: flex; gap: 8px; }
+.mb-import-btn { display: inline-flex; align-items: center; gap: 6px; }
+.mb-pinned-pills { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mb-pinned-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 32px;
+  padding: 0 11px;
+  border-radius: 999px;
+  border: 1px solid var(--mb-line);
+  background: #ffffff;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 550;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 140ms ease;
+  white-space: nowrap;
+}
+.mb-pinned-pill:hover {
+  border-color: #cbd5e1;
+  color: var(--text-primary);
+  background: var(--mb-soft);
+}
+.mb-pinned-pill[data-on="true"] {
+  background: var(--accent-dim, rgba(10, 132, 255, 0.1));
+  border-color: var(--accent, #0a84ff);
+  color: var(--accent, #0a84ff);
+  font-weight: 650;
+}
+.mb-pinned-pin {
+  transform: rotate(45deg);
+  opacity: 0.8;
+}
+.dark .mb-pinned-pill {
+  background: var(--surface-2);
+  border-color: var(--border);
+  color: var(--text-secondary);
+}
+.dark .mb-pinned-pill:hover {
+  background: var(--surface-3);
+  color: #ffffff;
+}
+.dark .mb-pinned-pill[data-on="true"] {
+  background: rgba(10, 132, 255, 0.2);
+  border-color: var(--accent);
+  color: #58a6ff;
+}
 
 .mb-card { background: var(--surface, #fff); border: 1px solid var(--mb-line); border-radius: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
 
-.mb-tabs { display: flex; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--mb-line); overflow-x: auto; scrollbar-width: none; background: transparent !important; }
+.mb-tabs { display: flex; gap: 8px; padding: 8px 16px; border: none !important; border-bottom: none !important; overflow-x: auto; scrollbar-width: none; background: transparent !important; }
 .mb-tabs::-webkit-scrollbar { display: none; }
-.mb-tabs button { display: inline-flex; align-items: center; gap: 7px; height: 44px; padding: 0 6px; border: none !important; background: transparent !important; font: inherit; font-size: 13.5px; font-weight: 550; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent !important; margin-bottom: -1px; white-space: nowrap; border-radius: 0 !important; box-shadow: none !important; transition: color 150ms ease, border-color 150ms ease; }
-.mb-tabs button:hover { color: var(--text-primary); background: transparent !important; }
-.mb-tabs button[aria-selected="true"] { color: var(--text-primary) !important; background: transparent !important; border: none !important; border-bottom: 2px solid var(--accent) !important; font-weight: 650; box-shadow: none !important; }
-.mb-tabs button[aria-selected="true"][data-tone="active"] { border-bottom-color: #34c759 !important; }
-.mb-tabs button[aria-selected="true"][data-tone="expiring"] { border-bottom-color: #ff9f0a !important; }
-.mb-tabs button[aria-selected="true"][data-tone="expired"] { border-bottom-color: #ff3b30 !important; }
-.mb-tabs button[aria-selected="true"][data-tone="none"] { border-bottom-color: var(--text-tertiary) !important; }
+.mb-tabs button { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px; border: none !important; border-bottom: none !important; background: transparent !important; font: inherit; font-size: 13.5px; font-weight: 550; color: var(--text-secondary); cursor: pointer; white-space: nowrap; border-radius: 8px !important; box-shadow: none !important; transition: all 150ms ease; }
+.mb-tabs button:hover { color: var(--text-primary); background: var(--mb-soft, rgba(0,0,0,0.03)) !important; }
+.mb-tabs button[aria-selected="true"] { color: var(--text-primary) !important; background: transparent !important; border: none !important; border-bottom: none !important; font-weight: 650; box-shadow: none !important; }
 .mb-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--mb-soft); color: var(--text-tertiary); font-size: 11.5px; font-weight: 600; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; transition: background 150ms, color 150ms; }
 .mb-tabs button[aria-selected="true"] .mb-count { background: var(--accent-dim) !important; color: var(--accent) !important; }
 .mb-tabs button[aria-selected="true"][data-tone="active"] .mb-count { background: rgba(52, 199, 89, 0.15) !important; color: #248a47 !important; }
 .mb-tabs button[aria-selected="true"][data-tone="expiring"] .mb-count { background: rgba(255, 159, 10, 0.15) !important; color: #c46800 !important; }
 .mb-tabs button[aria-selected="true"][data-tone="expired"] .mb-count { background: rgba(255, 59, 48, 0.15) !important; color: #c4001a !important; }
-.mb-dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0; animation: mb-dot-pop 160ms cubic-bezier(0.16, 1, 0.3, 1); }
-@keyframes mb-dot-pop { from { transform: scale(0.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
-.mb-dot--active { background: #34c759; } .mb-dot--expiring { background: #ff9f0a; } .mb-dot--expired { background: #ff3b30; } .mb-dot--none { background: #aeaeb2; }
+
+/* Radio button tab selection */
+.mb-tab-radio { width: 16px; height: 16px; border-radius: 50%; border: 1.8px solid #c7cad1; background: transparent; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 150ms ease; }
+.mb-tabs button:hover .mb-tab-radio { border-color: #8e8e93; }
+.mb-tab-radio--checked { border-color: var(--accent, #0a84ff) !important; background: transparent; }
+.mb-tabs button[data-tone="active"] .mb-tab-radio--checked { border-color: #34c759 !important; }
+.mb-tabs button[data-tone="expiring"] .mb-tab-radio--checked { border-color: #ff9f0a !important; }
+.mb-tabs button[data-tone="expired"] .mb-tab-radio--checked { border-color: #ff3b30 !important; }
+.mb-tab-radio-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent, #0a84ff); }
+.mb-tabs button[data-tone="active"] .mb-tab-radio-dot { background: #34c759; }
+.mb-tabs button[data-tone="expiring"] .mb-tab-radio-dot { background: #ff9f0a; }
+.mb-tabs button[data-tone="expired"] .mb-tab-radio-dot { background: #ff3b30; }
+.dark .mb-tab-radio { border-color: #52525b; }
 
 .mb-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px; flex-wrap: wrap; }
-.mb-search { position: relative; display: flex; align-items: center; flex: 0 1 340px; min-width: 200px; }
+.mb-search-container { position: relative; flex: 0 1 340px; min-width: 200px; }
+.mb-search { position: relative; display: flex; align-items: center; width: 100%; }
 .mb-search > svg { position: absolute; left: 11px; color: var(--text-tertiary); pointer-events: none; }
 .mb-search input { width: 100%; height: 36px; padding: 0 34px 0 34px; border: 1px solid var(--mb-line); border-radius: 9px; background: #fff; font: inherit; font-size: 13.5px; color: var(--text-primary); outline: none; }
 .mb-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-dim); }
@@ -1152,6 +1757,186 @@ const CSS = `
 .mb-search kbd { position: absolute; right: 9px; font: inherit; font-size: 11px; color: var(--text-tertiary); border: 1px solid var(--mb-line); border-radius: 4px; padding: 0 5px; line-height: 17px; }
 .mb-search--block { max-width: none; flex: 1; }
 .mb-x { position: absolute; right: 7px; width: 22px; height: 22px; border: none; border-radius: 50%; background: #eceef2; color: var(--text-secondary); display: grid; place-items: center; cursor: pointer; }
+
+/* Suggestions dropdown */
+.mb-search-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  min-width: 320px;
+  background: #ffffff;
+  border: 1px solid var(--mb-line);
+  border-radius: 12px;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.04);
+  z-index: 60;
+  overflow: hidden;
+  animation: mbSearchDropdownIn 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes mbSearchDropdownIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.mb-search-dropdown-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-tertiary);
+  border-bottom: 1px solid var(--mb-line);
+}
+.mb-search-dropdown-hints {
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--text-tertiary);
+}
+.mb-search-dropdown-list {
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  max-height: 330px;
+  overflow-y: auto;
+}
+.mb-search-sug-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: background 100ms ease;
+  font: inherit;
+  color: var(--text-primary);
+}
+.mb-search-sug-item:hover,
+.mb-search-sug-item[data-selected="true"] {
+  background: var(--mb-soft);
+}
+.mb-search-sug-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.mb-search-sug-row1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.mb-search-sug-name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mb-search-sug-plan {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--mb-soft);
+  color: var(--text-secondary);
+  border: 1px solid var(--mb-line);
+  white-space: nowrap;
+}
+.mb-search-sug-status {
+  font-size: 10px;
+  font-weight: 650;
+  padding: 1px 5px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.mb-search-sug-status--active {
+  background: rgba(16, 185, 129, 0.12);
+  color: #059669;
+}
+.mb-search-sug-status--expiring {
+  background: rgba(245, 158, 11, 0.12);
+  color: #d97706;
+}
+.mb-search-sug-status--expired {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+.mb-search-sug-status--inactive {
+  background: rgba(100, 116, 139, 0.14);
+  color: #64748b;
+}
+.mb-search-sug-status--none {
+  background: var(--mb-soft);
+  color: var(--text-tertiary);
+}
+.mb-search-sug-sub {
+  font-size: 11.5px;
+  color: var(--text-tertiary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.mb-search-sug-arrow {
+  color: var(--text-tertiary);
+  flex-shrink: 0;
+  transition: transform 120ms ease;
+}
+.mb-search-sug-item:hover .mb-search-sug-arrow,
+.mb-search-sug-item[data-selected="true"] .mb-search-sug-arrow {
+  color: var(--accent, #4f46e5);
+  transform: translateX(2px);
+}
+.mb-search-dropdown-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 14px;
+  font-size: 13px;
+  color: var(--text-tertiary);
+  justify-content: center;
+}
+.mb-search-dropdown-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-top: 1px solid var(--mb-line);
+  background: var(--mb-soft);
+  font-size: 12px;
+  font-weight: 550;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border: none;
+  width: 100%;
+  text-align: left;
+  transition: background 100ms ease;
+}
+.mb-search-dropdown-foot:hover {
+  color: var(--text-primary);
+  background: var(--surface-2, #eceef2);
+}
+.mb-search-mark {
+  background: rgba(79, 70, 229, 0.14);
+  color: var(--accent, #4f46e5);
+  font-weight: 700;
+  padding: 0 1px;
+  border-radius: 2px;
+}
 
 .mb-anchor { position: relative; }
 .mb-tool { display: inline-flex; align-items: center; gap: 7px; height: 36px; padding: 0 12px; border: 1px solid var(--mb-line); border-radius: 9px; background: #fff; font: inherit; font-size: 13.5px; font-weight: 550; color: var(--text-secondary); cursor: pointer; white-space: nowrap; }
@@ -1196,12 +1981,19 @@ const CSS = `
 .mb-link { border: none; background: none; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--accent); cursor: pointer; padding: 0 6px; }
 
 .mb-table { border-top: 1px solid var(--mb-line); }
-.mb-tr { display: grid; grid-template-columns: minmax(200px, 2.2fr) minmax(160px, 1.6fr) minmax(130px, 1.3fr) 110px 80px 64px; align-items: center; gap: 16px; padding: 0 16px; min-height: 60px; border-bottom: 1px solid #eef0f3; }
+.mb-tr { display: grid; grid-template-columns: minmax(220px, 2.5fr) minmax(170px, 1.8fr) 76px minmax(120px, 1.2fr) 96px; align-items: center; gap: 16px; padding: 0 16px; min-height: 60px; border-bottom: 1px solid #eef0f3; }
 .mb-th { min-height: 38px; background: var(--mb-soft); font-size: 11.5px; font-weight: 650; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; }
 .mb-row { color: inherit; text-decoration: none; transition: background 0.12s; }
 .mb-row:hover { background: #f8faff; }
 .mb-row:hover .mb-chev { color: var(--accent); transform: translateX(2px); }
 .mb-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.mb-name-row { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.mb-name-row strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; font-size: 14px; }
+.mb-wa-icon { display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; border-radius: 50%; background: rgba(37, 211, 102, 0.12); color: #128c7e; transition: all 140ms ease; flex-shrink: 0; text-decoration: none; }
+.mb-wa-icon:hover { background: #25d366; color: #ffffff; transform: scale(1.08); }
+.mb-wa-icon--disabled { opacity: 0.35; background: var(--mb-soft); color: var(--text-tertiary); cursor: not-allowed; }
+.mb-details-meta { display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: var(--text-tertiary); margin-top: 1px; }
+.mb-details-sep { color: #d1d5db; font-size: 11px; }
 .mb-text { display: flex; flex-direction: column; min-width: 0; font-size: 13.5px; }
 .mb-text > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mb-text strong { font-weight: 600; font-size: 14px; }
@@ -1210,11 +2002,16 @@ const CSS = `
 .mb-pill { display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 12px; font-size: 12px; font-weight: 600; white-space: nowrap; }
 .mb-pill--green { background: #e6f6ec; color: #1f8a3b; } .mb-pill--amber { background: #fff1de; color: #b45309; }
 .mb-pill--red { background: #ffe9ec; color: #c4001a; } .mb-pill--grey { background: #f0f0f3; color: #6e6e73; }
-.mb-progs { display: flex; gap: 6px; }
-.mb-progs span { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: var(--mb-soft); color: #c4c6cc; }
-.mb-progs span[data-on="true"]:first-child { background: #e6f6ec; color: #1f8a3b; }
-.mb-progs span[data-on="true"]:last-child { background: #f3eafb; color: #8944ab; }
+.mb-exp-line { display: flex; align-items: center; gap: 6px; margin-top: 1px; font-size: 12px; }
+.mb-exp-badge { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 6px; font-size: 10.5px; font-weight: 600; }
+.mb-exp-badge--ok { background: rgba(52, 199, 89, 0.12); color: #1f8a3b; }
+.mb-exp-badge--warn { background: rgba(255, 159, 10, 0.12); color: #b45309; }
+.mb-exp-badge--expired { background: rgba(255, 59, 48, 0.12); color: #c4001a; }
+.mb-price-val { font-weight: 650; font-size: 13.5px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.mb-dues-val { margin-top: 1px; }
+.mb-due-tag { display: inline-flex; align-items: center; padding: 1px 6px; border-radius: 5px; font-size: 11px; font-weight: 600; background: #fff1f2; color: #e11d48; }
 .mb-actions { display: flex; align-items: center; justify-content: flex-end; gap: 4px; }
+.mb-renew-btn { display: inline-flex; align-items: center; gap: 5px; height: 30px; padding: 0 11px; border-radius: 8px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
 .mb-chev { color: var(--text-tertiary); transition: transform 0.12s, color 0.12s; }
 .mb-icon { width: 32px; height: 32px; border: none; border-radius: 8px; background: none; color: var(--text-tertiary); display: inline-grid; place-items: center; cursor: pointer; }
 .mb-icon:hover:not(:disabled) { background: #eef0f4; color: var(--text-primary); }
@@ -1257,13 +2054,12 @@ const CSS = `
 .mb-warn { margin-top: 10px; padding: 9px 12px; border-radius: 9px; background: #fff7ea; color: #9a4b00; font-size: 13px; }
 
 @media (max-width: 1100px) {
-  .mb-tr { grid-template-columns: minmax(180px, 2fr) minmax(140px, 1.4fr) minmax(120px, 1.2fr) 104px 64px; }
-  .mb-tr > :nth-child(5) { display: none; }
+  .mb-tr { grid-template-columns: minmax(180px, 2fr) minmax(150px, 1.5fr) 72px minmax(100px, 1fr) 90px; gap: 12px; }
 }
 @media (max-width: 760px) {
-  .mb-tr { grid-template-columns: minmax(0, 1fr) auto 56px; gap: 10px; padding: 0 12px; }
+  .mb-tr { grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; padding: 10px 12px; min-height: 0; }
   .mb-hide-sm, .mb-th { display: none; }
-  .mb-search { flex: 1 1 100%; }
+  .mb-search-container, .mb-search { flex: 1 1 100%; width: 100%; }
   .mb-two { grid-template-columns: 1fr; }
   .mb-pop { position: fixed; left: 16px; right: 16px; top: 120px; width: auto; }
 }
@@ -1279,6 +2075,40 @@ const CSS = `
 .dark .mb { --mb-line: var(--border); --mb-soft: var(--surface-2); }
 .dark .mb-card { background: var(--surface-2); border-color: var(--border); }
 .dark .mb-search input { background: var(--surface-3); border-color: var(--border); color: #fff; }
+.dark .mb-search-dropdown {
+  background: var(--surface-2, #1c1c1e);
+  border-color: var(--border, #3a3a3c);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+}
+.dark .mb-search-dropdown-head {
+  border-color: var(--border, #2c2c2e);
+  color: var(--text-tertiary);
+}
+.dark .mb-search-sug-item:hover,
+.dark .mb-search-sug-item[data-selected="true"] {
+  background: var(--surface-3, #2c2c2e);
+}
+.dark .mb-search-sug-name {
+  color: #ffffff;
+}
+.dark .mb-search-sug-plan {
+  background: var(--surface-3, #242426);
+  border-color: var(--border, #3a3a3c);
+  color: var(--text-secondary);
+}
+.dark .mb-search-dropdown-foot {
+  border-color: var(--border, #2c2c2e);
+  background: var(--surface-2, #18181b);
+  color: var(--text-secondary);
+}
+.dark .mb-search-dropdown-foot:hover {
+  background: var(--surface-3, #27272a);
+  color: #ffffff;
+}
+.dark .mb-search-mark {
+  background: rgba(99, 102, 241, 0.32);
+  color: #a5b4fc;
+}
 .dark .mb-tool { background: var(--surface-2); border-color: var(--border); color: var(--text-secondary); }
 .dark .mb-tool:hover { background: var(--surface-3); color: #fff; }
 .dark .mb-tool[data-on="true"] { background: rgba(10, 132, 255, 0.2); border-color: rgba(10, 132, 255, 0.4); color: #58a6ff; }
@@ -1348,81 +2178,55 @@ const CSS = `
   display: inline-flex;
   align-items: center;
 }
-.mb-pill--btn {
+.mb-toggle {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  cursor: pointer;
-  border: 1px solid transparent;
-  font: inherit;
-  font-size: 11.5px;
-  font-weight: 650;
-  padding: 0 9px;
+  width: 38px;
   height: 22px;
-  border-radius: 11px;
-  transition: all 140ms ease;
-  background: #f0f0f3;
-  color: #6e6e73;
-}
-.mb-pill--btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-}
-.mb-status-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
+  border-radius: 999px;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  background: #d1d5db;
+  transition: background-color 180ms ease, opacity 150ms ease;
   flex-shrink: 0;
+  outline: none;
 }
-.mb-status-caret {
-  opacity: 0.65;
-  transition: transform 140ms ease;
-  margin-left: 1px;
+.mb-toggle:hover:not(:disabled) {
+  filter: brightness(0.96);
 }
-.mb-status-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  z-index: 50;
-  min-width: 125px;
-  padding: 4px;
-  border-radius: 10px;
-  background: #ffffff;
-  border: 1px solid var(--border, #e5e5ea);
-  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.15), 0 0 1px rgba(0, 0, 0, 0.1);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+.mb-toggle:disabled {
+  opacity: 0.6;
+  cursor: wait;
 }
-.dark .mb-status-menu {
-  background: var(--surface-2, #1c1c1e);
-  border-color: var(--border, #2c2c2e);
+.mb-toggle--on {
+  background: #16a34a;
 }
-.mb-status-menu button {
+.dark .mb-toggle--off {
+  background: #3f3f46;
+}
+.dark .mb-toggle--on {
+  background: #16a34a;
+}
+.mb-toggle-thumb {
   display: flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 7px 9px;
-  border: none;
-  background: transparent;
-  border-radius: 6px;
-  font-size: 12.5px;
-  font-weight: 550;
-  color: var(--text-primary);
-  cursor: pointer;
-  text-align: left;
-  transition: background 120ms ease;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateX(0);
 }
-.mb-status-menu button:hover {
-  background: var(--mb-soft, rgba(118, 118, 128, 0.1));
+.mb-toggle--on .mb-toggle-thumb {
+  transform: translateX(16px);
 }
-.mb-status-menu button.active {
-  font-weight: 650;
-  background: rgba(10, 102, 214, 0.08);
-  color: var(--accent, #0a66d6);
-}
+.dark .mb-wa-icon { background: rgba(37, 211, 102, 0.2); color: #25d366; }
+.dark .mb-details-sep { color: #52525b; }
+.dark .mb-due-tag { background: rgba(225, 29, 72, 0.2); color: #fb7185; }
 .dark .mb-status-menu button.active {
   background: rgba(10, 132, 255, 0.18);
   color: #58a6ff;
@@ -1437,26 +2241,78 @@ const CSS = `
 .mb-dot--grey { background: #8e8e93; }
 .mb-check { margin-left: auto; color: var(--accent); }
 
-.mb-pop--wide { width: 780px; max-width: calc(100vw - 32px); max-height: min(720px, calc(100vh - 160px)); }
-.mb-pop-body--tags { padding: 4px 14px 14px; }
-.mb-tag-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 10px; }
-.mb-tag-card { background: #fbfbfc; border: 1px solid var(--mb-line, #e5e7eb); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
-.mb-tag-card-title { font-size: 11px; font-weight: 750; color: var(--text-tertiary, #6b7280); letter-spacing: 0.05em; text-transform: uppercase; margin: 0; }
-.mb-tag-card-chips { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
-.mb-tag-pill { display: inline-flex; align-items: center; height: 30px; padding: 0 12px; border-radius: 9999px; font-size: 12.5px; font-weight: 500; border: 1px solid var(--mb-line, #e5e7eb); background: #ffffff; color: var(--text-primary, #374151); cursor: pointer; transition: all 120ms ease; user-select: none; }
-.mb-tag-pill:hover { border-color: #9ca3af; color: #111827; }
-.mb-tag-pill[data-selected="true"] { border: 2px solid #111827; font-weight: 700; color: #111827; background: #ffffff; padding: 0 11px; }
-.dark .mb-tag-card { background: var(--surface-3, #242426); border-color: var(--border, #3a3a3c); }
-.dark .mb-tag-card-title { color: var(--text-tertiary); }
-.dark .mb-tag-pill { background: var(--surface-2, #1c1c1e); border-color: var(--border, #3a3a3c); color: var(--text-primary); }
-.dark .mb-tag-pill:hover { border-color: var(--border-mid, #48484a); }
-.dark .mb-tag-pill[data-selected="true"] { border: 2px solid #ffffff; color: #ffffff; background: rgba(255,255,255,0.12); }
+.mb-pop--wide { width: 580px; max-width: calc(100vw - 32px); max-height: min(640px, calc(100vh - 140px)); }
+.mb-pop-body--tags { padding: 0 14px 12px; max-height: 440px; overflow-y: auto; }
+.mb-tag-container { display: flex; flex-direction: column; gap: 8px; }
+.mb-tag-selected-bar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--mb-soft); border-radius: 8px; border: 1px solid var(--mb-line); flex-wrap: wrap; }
+.mb-tag-selected-label { font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.04em; white-space: nowrap; }
+.mb-tag-selected-chips { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; flex: 1; }
+.mb-tag-selected-chip { display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px; font-size: 11px; font-weight: 600; background: #0f172a; color: #ffffff; border: none; cursor: pointer; transition: opacity 120ms ease; }
+.mb-tag-selected-chip:hover { opacity: 0.85; }
+.mb-tag-clear-btn { margin-left: auto; font-size: 11px; font-weight: 600; color: var(--accent, #0a84ff); background: none; border: none; cursor: pointer; padding: 2px 4px; }
+.mb-tag-clear-btn:hover { text-decoration: underline; }
+.mb-tag-list { display: flex; flex-direction: column; border: 1px solid var(--mb-line, #e2e8f0); border-radius: 10px; background: #ffffff; overflow: hidden; }
+.mb-tag-row { display: flex; align-items: flex-start; gap: 12px; padding: 7px 11px; border-bottom: 1px solid var(--mb-line, #f1f5f9); transition: background 120ms ease; }
+.mb-tag-row:last-child { border-bottom: none; }
+.mb-tag-row:hover { background: var(--mb-soft, #f8fafc); }
+.mb-tag-row[data-active="true"] { background: rgba(10, 132, 255, 0.03); }
+.mb-tag-row-header { width: 120px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding-top: 3px; }
+.mb-tag-row-title { font-size: 11px; font-weight: 700; color: var(--text-tertiary, #64748b); letter-spacing: 0.04em; text-transform: uppercase; line-height: 1.2; }
+.mb-tag-row[data-active="true"] .mb-tag-row-title { color: var(--accent, #0a84ff); font-weight: 750; }
+.mb-tag-row-badge { font-size: 9.5px; font-weight: 750; padding: 1px 5px; border-radius: 999px; background: var(--accent, #0a84ff); color: #ffffff; line-height: 1.2; flex-shrink: 0; }
+.mb-tag-row-chips { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; min-width: 0; align-items: center; }
+.mb-tag-pill { display: inline-flex; align-items: center; gap: 4px; height: 26px; padding: 0 9px; border-radius: 9999px; font-size: 11.5px; font-weight: 500; border: 1px solid var(--mb-line, #e2e8f0); background: #ffffff; color: var(--text-primary, #334155); cursor: pointer; transition: all 120ms ease; user-select: none; white-space: nowrap; line-height: 1; }
+.mb-tag-pill:hover { border-color: #cbd5e1; color: var(--text-primary, #0f172a); background: var(--mb-soft, #f8fafc); }
+.mb-tag-pill[data-selected="true"] { background: #0f172a; border-color: #0f172a; color: #ffffff; font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,0.06); }
+.mb-tag-pill-check { flex-shrink: 0; }
+.dark .mb-tag-selected-bar { background: var(--surface-3); border-color: var(--border); }
+.dark .mb-tag-selected-chip { background: #ffffff; color: #09090b; }
+.dark .mb-tag-list { background: var(--surface-2, #1c1c1e); border-color: var(--border, #3a3a3c); }
+.dark .mb-tag-row { border-color: var(--border, #2c2c2e); }
+.dark .mb-tag-row:hover { background: var(--surface-3, #242426); }
+.dark .mb-tag-row[data-active="true"] { background: rgba(10, 132, 255, 0.08); }
+.dark .mb-tag-row-title { color: var(--text-tertiary); }
+.dark .mb-tag-row[data-active="true"] .mb-tag-row-title { color: #58a6ff; }
+.dark .mb-tag-pill { background: var(--surface-3, #242426); border-color: var(--border, #3a3a3c); color: var(--text-secondary); }
+.dark .mb-tag-pill:hover { background: var(--surface-2); border-color: var(--border-mid); color: #ffffff; }
+.dark .mb-tag-pill[data-selected="true"] { background: #ffffff; border-color: #ffffff; color: #09090b; font-weight: 600; }
+@media (max-width: 620px) {
+  .mb-pop--wide { width: auto !important; left: 10px !important; right: 10px !important; }
+  .mb-tag-row { flex-direction: column; gap: 6px; padding: 9px 10px; }
+  .mb-tag-row-header { width: 100%; }
+}
 .mb-filter-export-banner { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 10px; background: var(--mb-soft); border: 1px solid var(--mb-line); margin-bottom: 4px; }
+.mb-bulk-btn { display: inline-flex; align-items: center; gap: 6px; }
+.mb-bulk-menu { min-width: 270px; padding: 6px; }
+.mb-bulk-menu-head { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); border-bottom: 1px solid var(--mb-line); margin-bottom: 4px; }
+.mb-bulk-item { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px; border: none; background: none; border-radius: 8px; font: inherit; text-align: left; cursor: pointer; color: var(--text-primary); transition: background 120ms ease; }
+.mb-bulk-item:hover:not(:disabled) { background: var(--mb-soft); }
+.mb-bulk-item:disabled { opacity: 0.45; cursor: default; }
+.mb-bulk-item-icon { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0; background: var(--mb-soft); color: var(--text-primary); border: 1px solid var(--mb-line); }
+.mb-bulk-item-icon--import { background: rgba(10, 132, 255, 0.08); color: var(--accent, #0a84ff); border-color: rgba(10, 132, 255, 0.2); }
+.mb-bulk-item-icon--export { background: rgba(16, 185, 129, 0.08); color: #059669; border-color: rgba(16, 185, 129, 0.2); }
+.mb-bulk-item-text { flex: 1; min-width: 0; }
+.mb-bulk-item-text strong { display: block; font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
+.mb-bulk-item-text small { display: block; font-size: 11.5px; color: var(--text-tertiary); margin-top: 1px; }
+.mb-bulk-arrow { color: var(--text-tertiary); flex-shrink: 0; }
+.mb-bulk-back-btn { display: inline-flex; align-items: center; gap: 4px; background: none; border: none; font: inherit; font-size: 12px; font-weight: 600; color: var(--text-secondary); cursor: pointer; padding: 2px 6px; border-radius: 5px; }
+.mb-bulk-back-btn:hover { color: var(--text-primary); background: var(--mb-soft); }
+.dark .mb-bulk-item-icon { background: var(--surface-3); border-color: var(--border); }
+.dark .mb-bulk-item-icon--import { background: rgba(10, 132, 255, 0.18); border-color: rgba(10, 132, 255, 0.35); color: #58a6ff; }
+.dark .mb-bulk-item-icon--export { background: rgba(16, 185, 129, 0.18); border-color: rgba(16, 185, 129, 0.35); color: #34d399; }
 .mb-export-btn { display: inline-flex; align-items: center; gap: 6px; }
 .mb-export-caret { transition: transform 140ms ease; opacity: 0.7; }
 .mb-export-caret--up { transform: rotate(180deg); }
-.mb-export-menu { min-width: 250px; padding: 6px; }
+.mb-export-menu { min-width: 280px; padding: 6px; }
 .mb-export-menu-head { display: flex; align-items: center; justify-content: space-between; padding: 7px 10px 5px; font-size: 12.5px; color: var(--text-tertiary); }
+.mb-export-format-badge { font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; background: var(--mb-soft); color: var(--accent); border: 1px solid var(--mb-line); }
+.mb-export-format-box { padding: 4px 10px 8px; }
+.mb-export-format-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-tertiary); margin-bottom: 5px; }
+.mb-export-format-pills { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; background: var(--mb-soft); padding: 3px; border-radius: 8px; border: 1px solid var(--mb-line); }
+.mb-export-format-pill { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 28px; border: none; background: transparent; border-radius: 6px; font-size: 11.5px; font-weight: 600; color: var(--text-secondary); cursor: pointer; transition: all 120ms ease; }
+.mb-export-format-pill:hover { color: var(--text-primary); }
+.mb-export-format-pill.active { background: #ffffff; color: var(--accent, #4f46e5); box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+.dark .mb-export-format-pill.active { background: var(--surface-2, #2c2c2e); color: #ffffff; }
 .mb-export-check { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 500; padding: 6px 10px; cursor: pointer; color: var(--text-primary); border-radius: 7px; margin-bottom: 2px; }
 .mb-export-check:hover { background: var(--mb-soft); }
 .mb-export-check input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
