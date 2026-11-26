@@ -161,7 +161,6 @@ export default function MembershipPlansPage() {
 
       <header className="mpl-head">
         <div className="mpl-title">
-          <span className="mpl-title-icon"><Ticket size={21} /></span>
           <div>
             <h1>Membership plans</h1>
             <p>{loading ? "\u00a0" : `${stats.active} plan${stats.active === 1 ? "" : "s"} available to new members${stats.hidden ? ` · ${stats.hidden} hidden` : ""}`}</p>

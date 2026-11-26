@@ -1,6 +1,8 @@
 // app/dashboard/components/brand.ts
 // Single source of truth for the org theme. Used by Sidebar (every page) and Settings (live preview).
 
+import { supabase } from "@/lib/supabase";
+
 export type Brand = {
   accent: string;
   secondary: string;
@@ -231,6 +233,28 @@ export function cacheBrand(b: Brand) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify(b)); } catch { /* storage can be blocked */ }
 }
 
+export const LOGO_CACHE_KEY = "psync.org.logo";
+
+export function readCachedOrgLogo(): string | null {
+  try {
+    return localStorage.getItem(LOGO_CACHE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function cacheOrgLogo(url: string | null) {
+  try {
+    if (url) {
+      localStorage.setItem(LOGO_CACHE_KEY, url);
+    } else {
+      localStorage.removeItem(LOGO_CACHE_KEY);
+    }
+  } catch {
+    /* storage can be blocked */
+  }
+}
+
 /** Fired by Settings after a successful save so the sidebar re-syncs. */
 export const BRAND_SAVED_EVENT = "psync:brand-saved";
 
@@ -244,7 +268,34 @@ export function emitBrandSaved(b: Brand) {
 }
 
 export function emitOrgUpdated(detail: OrgUpdate) {
+  if (detail.logo_url !== undefined) {
+    cacheOrgLogo(detail.logo_url);
+  }
   window.dispatchEvent(new CustomEvent<OrgUpdate>(ORG_UPDATED_EVENT, { detail }));
+}
+
+export async function saveOrgToServer(patch: Record<string, unknown>): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    if (!token) return { ok: false, error: "Not authenticated" };
+
+    const res = await fetch("/api/org", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(patch),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      return { ok: false, error: err.error || "Failed to save changes" };
+    }
+    return { ok: true };
+  } catch (err: unknown) {
+    return { ok: false, error: err instanceof Error ? err.message : "Network error" };
+  }
 }
 
 /**

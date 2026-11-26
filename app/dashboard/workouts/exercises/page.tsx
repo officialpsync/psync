@@ -327,7 +327,6 @@ export default function ExercisesPage() {
 
       <header className="wk-head">
         <div className="wk-title">
-          <span className="wk-title-icon wk-title-icon--ex"><Library size={21} /></span>
           <div>
             <h1>Exercises</h1>
             <p>{loading ? "\u00a0" : `${stats.total} in your library · ${stats.mine} made by your gym`}</p>

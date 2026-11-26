@@ -287,7 +287,7 @@ export default function EditMemberPage() {
         <div className="me-forms">
           {/* Personal */}
           <section id="me-personal" className="me-card me-card--blue">
-            <div className="me-card-h"><span className="me-card-icon"><User size={17} /></span><div><h2>Personal details</h2><p>Who they are and how to reach them</p></div></div>
+            <div className="me-card-h"><div><h2>Personal details</h2><p>Who they are and how to reach them</p></div></div>
             <div className="me-grid">
               <label className="me-field me-span-2">
                 <span className="me-label">Full name</span>
@@ -326,7 +326,7 @@ export default function EditMemberPage() {
 
           {/* Body and goals */}
           <section id="me-body" className="me-card me-card--orange">
-            <div className="me-card-h"><span className="me-card-icon"><Flame size={17} /></span><div><h2>Body and goals</h2><p>Used to set calorie and macro targets</p></div></div>
+            <div className="me-card-h"><div><h2>Body and goals</h2><p>Used to set calorie and macro targets</p></div></div>
             <div className="me-grid">
               <label className="me-field">
                 <span className="me-label"><Ruler size={13} />Height<Optional /></span>
@@ -401,7 +401,6 @@ export default function EditMemberPage() {
           {/* Health */}
           <section id="me-health" className="me-card me-card--red">
             <div className="me-card-h">
-              <span className="me-card-icon"><HeartPulse size={17} /></span>
               <div><h2>Health</h2><p>The diet engine uses these to filter foods. Select everything that applies.</p></div>
               {healthCount > 0 && <span className="me-count">{healthCount} selected</span>}
             </div>
@@ -434,7 +433,7 @@ export default function EditMemberPage() {
 
           {/* Notes */}
           <section id="me-notes" className="me-card me-card--grey">
-            <div className="me-card-h"><span className="me-card-icon"><StickyNote size={17} /></span><div><h2>Notes<Optional /></h2><p>Injuries, preferences, anything the team should know</p></div></div>
+            <div className="me-card-h"><div><h2>Notes<Optional /></h2><p>Injuries, preferences, anything the team should know</p></div></div>
             <textarea className="ps-input" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Old knee injury, prefers morning sessions…" rows={4} />
           </section>
         </div>

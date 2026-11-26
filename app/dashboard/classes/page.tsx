@@ -1308,7 +1308,6 @@ export default function ClassesPage() {
       {/* Header without top KPI cards */}
       <header className="cl-head">
         <div className="cl-title">
-          <span className="cl-title-icon"><CalendarDays size={20} /></span>
           <div>
             <h1>Classes</h1>
             <p>{loading ? "\u00a0" : `${classes.length} active class${classes.length === 1 ? "" : "es"} · ${titleLabel}`}</p>

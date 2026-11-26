@@ -303,9 +303,6 @@ export default function RenewalsPage() {
       {/* ── Page Header ── */}
       <header className="rn-head">
         <div className="rn-head-left">
-          <div className="rn-head-icon">
-            <RefreshCw size={22} />
-          </div>
           <div>
             <div className="rn-breadcrumb">
               <Link href="/dashboard">Dashboard</Link>

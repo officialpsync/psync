@@ -440,7 +440,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;fo
 
       <header className="py-head">
         <div className="py-title">
-          <span className="py-title-icon"><Wallet size={21} /></span>
           <div>
             <h1>Payments</h1>
             <p>{loading ? "\u00a0" : `${formatINR(totalThisMonth)} collected this month from ${thisMonth.length} payment${thisMonth.length === 1 ? "" : "s"}`}</p>

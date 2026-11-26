@@ -703,7 +703,6 @@ export default function GymRecipesPage() {
 
       <header className="dt-head">
         <div className="dt-title">
-          <span className="dt-title-icon"><UtensilsCrossed size={21} /></span>
           <div>
             <h1>Recipe library</h1>
             <p>{loading ? "\u00a0" : `${recipes.length} custom recipe${recipes.length === 1 ? "" : "s"} · used as swap options in diet plans`}</p>

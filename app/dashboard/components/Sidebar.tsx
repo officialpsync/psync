@@ -13,7 +13,7 @@ import {
   LayoutGrid, Users, UserCheck, CalendarDays, Dumbbell, Salad,
   Wallet, Ticket, BarChart2, Settings, LogOut, Menu, ChevronRight, ChevronDown,
   ChefHat, UserPlus, UsersRound, ClipboardList, PanelLeftClose, PanelLeftOpen, Library, Carrot,
-  Pencil, Sun, Moon, Crown, RefreshCw,
+  Pencil, Sun, Moon, Crown, RefreshCw, Home,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase";
@@ -24,7 +24,7 @@ import {
   applyBrand, cacheBrand, readCachedBrand, resolveBrand,
   BRAND_SAVED_EVENT, ORG_UPDATED_EVENT, THEME_EVENT, THEME_KEY,
   getStoredTheme, applyTheme, toggleTheme, createBrandFromLogo,
-  emitBrandSaved, emitOrgUpdated,
+  emitBrandSaved, emitOrgUpdated, readCachedOrgLogo, cacheOrgLogo, saveOrgToServer,
   type Brand, type OrgUpdate,
 } from "./brand";
 
@@ -120,11 +120,6 @@ function visibleEntries(entries: NavEntry[], allowed: (i: NavItem) => boolean): 
   return out;
 }
 
-function roleLabel(role: string) {
-  const s = role.replace(/_/g, " ");
-  return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
 /* ──────────────────────────────────────────────────────────────────────────
    Workspace + brand
    ────────────────────────────────────────────────────────────────────────── */
@@ -136,7 +131,10 @@ type Workspace = { name: string; email: string; role: string; logo: string | nul
  * dashboard page, so the brand is live everywhere, not only after visiting Settings.
  */
 function useWorkspace() {
-  const [ws, setWs] = useState<Workspace | null>(null);
+  const [ws, setWs] = useState<Workspace | null>(() => {
+    const cachedLogo = readCachedOrgLogo();
+    return cachedLogo ? { name: "My gym", email: "", role: "owner", logo: cachedLogo, orgId: null } : null;
+  });
 
   // Apply the last known theme before paint so navigation never flashes defaults.
   useLayoutEffect(() => {
@@ -159,7 +157,7 @@ function useWorkspace() {
         .single();
 
       let name = "My gym";
-      let logo: string | null = null;
+      let logo: string | null = readCachedOrgLogo();
       const orgId = roleData?.org_id ?? null;
       if (roleData) {
         const { data: org } = await supabase
@@ -168,7 +166,10 @@ function useWorkspace() {
           .eq("id", roleData.org_id)
           .single();
         if (org?.name) name = org.name;
-        logo = org?.logo_url ?? null;
+        if (org?.logo_url !== undefined) {
+          logo = org.logo_url;
+          cacheOrgLogo(org.logo_url);
+        }
         if (org && alive) {
           const brand = resolveBrand(org.brand as Partial<Brand> | null, org.brand_color);
           applyBrand(brand);
@@ -200,6 +201,9 @@ function useWorkspace() {
     const onOrg = (e: Event) => {
       const d = (e as CustomEvent<OrgUpdate>).detail;
       if (!d) return;
+      if (d.logo_url !== undefined) {
+        cacheOrgLogo(d.logo_url);
+      }
       setWs((w) => w && ({
         ...w,
         name: d.name ?? w.name,
@@ -325,34 +329,43 @@ function useAutoSidebar() {
    Pieces
    ────────────────────────────────────────────────────────────────────────── */
 
-/** Gym logo, or the gym's initial on the theme chip when there is no logo (or it fails to load). Shows pencil badge to indicate it is editable. */
+/** Gym logo, or an empty circular placeholder when there is no logo (or it fails to load). Shows pencil badge to indicate it is editable. */
 function Mark({
   logo,
-  initial,
   onUploadClick,
+  size = "md",
 }: {
   logo: string | null;
-  initial: string;
   onUploadClick?: (e: React.MouseEvent) => void;
+  size?: "md" | "lg";
 }) {
   const [failed, setFailed] = useState(false);
+  const showImage = Boolean(logo && !failed);
+
   return (
-    <span className="db-sb-mark-wrap" aria-hidden>
-      <span className="db-sb-mark">
-        {logo && !failed
+    <span
+      className={`db-sb-mark-wrap ${size === "lg" ? "db-sb-mark-wrap--lg" : ""}`}
+      aria-hidden
+      onClick={onUploadClick}
+      style={{ cursor: onUploadClick ? "pointer" : "default" }}
+    >
+      <span
+        className={`db-sb-mark ${size === "lg" ? "db-sb-mark--lg" : ""} ${!showImage ? "db-sb-mark--empty" : ""}`}
+      >
+        {showImage ? (
           // eslint-disable-next-line @next/next/no-img-element
-          ? <img src={logo} alt="" onError={() => setFailed(true)} />
-          : initial}
+          <img src={logo!} alt="Gym logo" onError={() => setFailed(true)} />
+        ) : null}
       </span>
       <span
         className="db-sb-mark-badge"
-        title="Upload logo & match theme"
+        title={showImage ? "Change logo" : "Upload logo"}
         role="button"
         tabIndex={0}
         onClick={onUploadClick}
         style={{ pointerEvents: onUploadClick ? "auto" : undefined, cursor: onUploadClick ? "pointer" : undefined }}
       >
-        <Pencil size={10.5} strokeWidth={2.4} />
+        <Pencil size={size === "lg" ? 11 : 10} strokeWidth={2.4} />
       </span>
     </span>
   );
@@ -403,12 +416,14 @@ function AppNav() {
       const urlWithBust = `${publicUrl}?t=${Date.now()}`;
 
       const newBrand = await createBrandFromLogo(file);
-      await supabase.from("organizations").update({
+      const { ok: savedOk, error: serverErr } = await saveOrgToServer({
         logo_url: urlWithBust,
         brand: newBrand,
         brand_color: newBrand.accent,
-      }).eq("id", ws.orgId);
+      });
+      if (!savedOk) throw new Error(serverErr || "Failed to save logo to server");
 
+      cacheOrgLogo(urlWithBust);
       applyBrand(newBrand);
       cacheBrand(newBrand);
       emitBrandSaved(newBrand);
@@ -463,8 +478,7 @@ function AppNav() {
 
   const tabs = TABS_DEF.filter(({ item }) => allowed(item));
 
-  const gymInitial = (ws?.name ?? "G").trim().charAt(0).toUpperCase();
-  const accountInitial = (ws?.email ?? "").trim().charAt(0).toUpperCase() || gymInitial;
+  const accountInitial = (ws?.email ?? "").trim().charAt(0).toUpperCase() || "U";
   const moreActive = !tabs.some(({ item }) => item.href === activeHref);
 
   /* ---------- desktop rows ---------- */
@@ -546,32 +560,23 @@ function AppNav() {
         <span className="db-sb-edge" aria-hidden />
         <div className="db-sb-inner">
           <div className="db-sb-head">
-            <Link href="/dashboard/settings" className="db-sb-brand" aria-label="Gym settings">
-              <Mark key={ws?.logo ?? "none"} logo={ws?.logo ?? null} initial={gymInitial} onUploadClick={handleMarkUploadClick} />
-              <span className="db-sb-id db-sb-fade">
-                {ws ? (
-                  <>
-                    <span className="db-sb-name db-sb-truncate">{ws.name}</span>
-                    <span className="db-sb-role db-sb-truncate">{roleLabel(ws.role)}</span>
-                  </>
-                ) : (
-                  <>
-                    <span className="db-sb-skel" style={{ width: "70%" }} />
-                    <span className="db-sb-skel" style={{ width: "38%", height: 10, marginTop: 6 }} />
-                  </>
-                )}
-              </span>
-            </Link>
-            <button
-              type="button"
-              className="db-sb-iconbtn db-sb-fade"
-              onClick={sb.togglePin}
-              aria-pressed={sb.pinned}
-              aria-label={sb.pinned ? "Unpin sidebar" : "Pin sidebar open"}
-              title={sb.pinned ? "Unpin sidebar ( [ )" : "Pin sidebar open ( [ )"}
-            >
-              <PinIcon size={17} aria-hidden />
-            </button>
+            <div className="db-sb-head-top">
+              <button
+                type="button"
+                className="db-sb-iconbtn db-sb-pin-btn db-sb-fade"
+                onClick={sb.togglePin}
+                aria-pressed={sb.pinned}
+                aria-label={sb.pinned ? "Unpin sidebar" : "Pin sidebar open"}
+                title={sb.pinned ? "Unpin sidebar ( [ )" : "Pin sidebar open ( [ )"}
+              >
+                <PinIcon size={18} aria-hidden />
+              </button>
+            </div>
+            <div className="db-sb-logo-wrap">
+              <Link href="/dashboard/settings" className="db-sb-brand" aria-label="Gym settings" title={ws?.name ? `${ws.name} - Settings` : "Settings"}>
+                <Mark key={ws?.logo ?? "none"} logo={ws?.logo ?? null} onUploadClick={handleMarkUploadClick} size="lg" />
+              </Link>
+            </div>
           </div>
 
           <nav className="db-sb-nav">
@@ -620,7 +625,7 @@ function AppNav() {
       {/* ---------- Phone / tablet top bar ---------- */}
       <header className="ps-topbar db-sb-top" data-scrolled={scrolled}>
         <Link href="/dashboard" className="db-sb-top-brand">
-          <Mark key={ws?.logo ?? "none"} logo={ws?.logo ?? null} initial={gymInitial} onUploadClick={handleMarkUploadClick} />
+          <Mark key={ws?.logo ?? "none"} logo={ws?.logo ?? null} onUploadClick={handleMarkUploadClick} />
           <span className="db-sb-top-name db-sb-truncate">{ws?.name ?? "\u00a0"}</span>
         </Link>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>

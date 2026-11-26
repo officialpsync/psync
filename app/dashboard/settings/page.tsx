@@ -14,6 +14,7 @@ import { Sheet } from "../components/Sheet";
 import {
   type Brand, DEFAULT_BRAND, FONT_OPTIONS, applyBrand, resolveBrand,
   readCachedBrand, cacheBrand, fgFor, isValidHex, emitBrandSaved, emitOrgUpdated, createBrandFromLogo,
+  saveOrgToServer, cacheOrgLogo, readCachedOrgLogo,
 } from "../components/brand";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -113,6 +114,9 @@ export default function SettingsPage() {
       const { data: orgData } = await supabase
         .from("organizations").select("*").eq("id", oid).single();
       const od = orgData as Org;
+      if (od?.logo_url) {
+        cacheOrgLogo(od.logo_url);
+      }
       setOrg(od);
 
       // Merge saved brand over defaults (honours the legacy brand_color column)
@@ -147,12 +151,12 @@ export default function SettingsPage() {
   async function saveOrg() {
     if (!org || !org.name.trim()) return;
     setSaving(true);
-    const { error } = await supabase.from("organizations").update({
+    const { ok: savedOk, error } = await saveOrgToServer({
       name: org.name.trim(), email: org.email, phone: org.phone,
       address: org.address, gst_number: org.gst_number,
-    }).eq("id", org.id);
+    });
     setSaving(false);
-    if (error) { show("Couldn't save changes. Try again.", "error"); return; }
+    if (!savedOk) { show(error || "Couldn't save changes. Try again.", "error"); return; }
     setDirty(false);
     emitOrgUpdated({ name: org.name.trim() });
     show("Changes saved");
@@ -177,12 +181,14 @@ export default function SettingsPage() {
       // Automatically extract brand colors from logo and generate new default theme
       const extractedBrand = await createBrandFromLogo(file, brand);
 
-      await supabase.from("organizations").update({
+      const { ok: savedOk, error: serverErr } = await saveOrgToServer({
         logo_url: urlWithBust,
         brand: extractedBrand,
         brand_color: extractedBrand.accent,
-      }).eq("id", org.id);
+      });
+      if (!savedOk) throw new Error(serverErr || "Failed to update logo in database");
 
+      cacheOrgLogo(urlWithBust);
       setOrg((o) => o ? { ...o, logo_url: urlWithBust, brand: extractedBrand, brand_color: extractedBrand.accent } : o);
       setBrand(extractedBrand);
       setAccentHex(extractedBrand.accent);
@@ -207,10 +213,11 @@ export default function SettingsPage() {
     try {
       show("Extracting brand colors from logo...");
       const extractedBrand = await createBrandFromLogo(org.logo_url, brand);
-      await supabase.from("organizations").update({
+      const { ok: savedOk, error: serverErr } = await saveOrgToServer({
         brand: extractedBrand,
         brand_color: extractedBrand.accent,
-      }).eq("id", org.id);
+      });
+      if (!savedOk) throw new Error(serverErr || "Failed to save extracted brand");
 
       setOrg((o) => o ? { ...o, brand: extractedBrand, brand_color: extractedBrand.accent } : o);
       setBrand(extractedBrand);
@@ -233,7 +240,10 @@ export default function SettingsPage() {
     try {
       const match = org.logo_url.match(/org-assets\/(.+?)(\?|$)/);
       if (match) await supabase.storage.from("org-assets").remove([match[1]]);
-      await supabase.from("organizations").update({ logo_url: null }).eq("id", org.id);
+      const { ok: savedOk, error: serverErr } = await saveOrgToServer({ logo_url: null });
+      if (!savedOk) throw new Error(serverErr || "Failed to remove logo");
+
+      cacheOrgLogo(null);
       setOrg((o) => o ? { ...o, logo_url: null } : o);
       emitOrgUpdated({ logo_url: null });
       show("Logo removed");
@@ -258,11 +268,11 @@ export default function SettingsPage() {
   async function saveBrand() {
     if (!org) return;
     setSavingBrand(true);
-    const { error } = await supabase.from("organizations")
-      .update({ brand, brand_color: brand.accent })
-      .eq("id", org.id);
+    const { ok: savedOk, error: serverErr } = await saveOrgToServer({
+      brand, brand_color: brand.accent,
+    });
     setSavingBrand(false);
-    if (error) { show("Couldn't save branding. Try again.", "error"); return; }
+    if (!savedOk) { show(serverErr || "Couldn't save branding. Try again.", "error"); return; }
     setOrg((o) => o ? { ...o, brand } : o);
     setBrandDirty(false);
     emitBrandSaved(brand);
@@ -372,7 +382,6 @@ export default function SettingsPage() {
 
       <header className="st-head">
         <div className="st-title">
-          <span className="st-title-icon"><SettingsIcon size={21} /></span>
           <div><h1>Settings</h1><p>Your gym&apos;s profile, branding, branches and team access.</p></div>
         </div>
         {org && (
@@ -401,7 +410,7 @@ export default function SettingsPage() {
           ) : (
             <>
               <section className="st-card">
-                <div className="st-card-h"><span className="st-card-icon"><ImagePlus size={16} /></span><div><h2>Logo</h2><p>Shown on receipts, invoices and the sidebar. PNG, JPG or WebP, up to 2 MB.</p></div></div>
+                <div className="st-card-h"><div><h2>Logo</h2><p>Shown on receipts, invoices and the sidebar. PNG, JPG or WebP, up to 2 MB.</p></div></div>
                 <div className="st-logo">
                   <div className="st-logo-box">
                     {uploadingLogo ? <Loader2 size={22} className="ps-spin" />
@@ -436,7 +445,7 @@ export default function SettingsPage() {
               </section>
 
               <section className="st-card">
-                <div className="st-card-h"><span className="st-card-icon"><Store size={16} /></span><div><h2>Gym details</h2><p>Used on receipts, invoices, WhatsApp messages and member-facing pages.</p></div></div>
+                <div className="st-card-h"><div><h2>Gym details</h2><p>Used on receipts, invoices, WhatsApp messages and member-facing pages.</p></div></div>
                 <div className="st-grid">
                   <label className="st-field st-span-2"><span>Gym name</span>
                     <input className="ps-input" value={org.name} onChange={(e) => update({ name: e.target.value })} autoComplete="organization" data-invalid={!org.name.trim()} />
@@ -461,7 +470,7 @@ export default function SettingsPage() {
               </section>
 
               <section className="st-card">
-                <div className="st-card-h"><span className="st-card-icon"><Receipt size={16} /></span><div><h2>Receipt preview</h2><p>How your details appear at the top of invoices.</p></div></div>
+                <div className="st-card-h"><div><h2>Receipt preview</h2><p>How your details appear at the top of invoices.</p></div></div>
                 <div className="st-receipt">
                   <div className="st-receipt-logo">{org.logo_url ? <img src={org.logo_url} alt="" /> : <Store size={20} />}</div>
                   <div className="st-receipt-text">
@@ -479,7 +488,7 @@ export default function SettingsPage() {
           {/* ── BRANDING ── */}
           {tab === "brand" && org && (
             <section className="st-card">
-              <div className="st-card-h"><span className="st-card-icon"><Palette size={16} /></span><div><h2>Branding</h2><p>Colours, shape and typography across the whole dashboard. Changes preview live.</p></div></div>
+              <div className="st-card-h"><div><h2>Branding</h2><p>Colours, shape and typography across the whole dashboard. Changes preview live.</p></div></div>
               <BrandPreview brand={brand} />
               <BrandSection label="Accent colour" desc="Buttons, links, active states and badges.">
                 <div className="st-swatches">
@@ -527,7 +536,7 @@ export default function SettingsPage() {
           {/* ── BRANCHES ── */}
           {tab === "branches" && (
             <section className="st-card">
-              <div className="st-card-h"><span className="st-card-icon"><Building2 size={16} /></span>
+              <div className="st-card-h">
                 <div><h2>Branches</h2><p>Each location, so members, staff and revenue can be tracked by branch.</p></div>
                 <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" onClick={() => openBranch(null)}><Plus size={14} strokeWidth={2.4} /> Add branch</button>
               </div>
@@ -560,7 +569,7 @@ export default function SettingsPage() {
           {tab === "staff" && (
             <>
               <section className="st-card st-team">
-                <div className="st-card-h"><span className="st-card-icon"><Users size={16} /></span><div><h2>Team access</h2><p>Logins, roles and which modules each person can open are managed on the Staff page.</p></div></div>
+                <div className="st-card-h"><div><h2>Team access</h2><p>Logins, roles and which modules each person can open are managed on the Staff page.</p></div></div>
                 <div className="st-team-stats">
                   <div><small>Active</small><b>{activeStaff}</b></div>
                   <div><small>Inactive</small><b>{staff.length - activeStaff}</b></div>
@@ -572,7 +581,7 @@ export default function SettingsPage() {
               </section>
               {staff.length > 0 && (
                 <section className="st-card">
-                  <div className="st-card-h"><span className="st-card-icon"><ShieldCheck size={16} /></span><div><h2>Quick controls</h2><p>Financial access and active status.</p></div>
+                  <div className="st-card-h"><div><h2>Quick controls</h2><p>Financial access and active status.</p></div>
                     <button type="button" className="ps-btn ps-btn--secondary ps-btn--sm" onClick={() => setShowStaffForm(true)}><Plus size={14} /> Quick add</button>
                   </div>
                   <div className="st-branches">

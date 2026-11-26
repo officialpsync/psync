@@ -10,13 +10,14 @@ import {
 } from "../../components/ui";
 import { DesignStyles } from "../../components/DesignSystem";
 import {
-  Activity, AlertTriangle, CalendarDays, ChevronLeft, Clock, Flame, HeartPulse, Mail, MapPin, MessageCircle,
+  Activity, AlertTriangle, Archive, ArchiveRestore, CalendarDays, ChevronLeft, Clock, Flame, HeartPulse, Mail, MapPin, MessageCircle,
   MoreHorizontal, Phone, Receipt, ShieldAlert, Sparkles, StickyNote, Target, User,
 } from "lucide-react";
 import { CopyPlanSheet, type CopyMember, type Kind } from "../components/CopyPlanSheet";
 import { SendOnboardingSheet } from "../components/SendOnboardingSheet";
 import { OnboardingReviewSheet } from "../components/OnboardingReviewSheet";
 import { OnboardingActivityLog } from "../components/OnboardingActivityLog";
+import { MemberOnboardingTab } from "../components/MemberOnboardingTab";
 import { EyeOff, GripVertical, LayoutGrid, RotateCcw, Check as CheckIcon, Send, FileText } from "lucide-react";
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor, TouchSensor, useSensor, useSensors, type DragEndEvent,
@@ -33,6 +34,7 @@ type Member = {
   gut_symptoms: string[] | null;
   food_intolerances: string[] | string | null; allergies: string[] | string | null;
   spice_tolerance: string | null; notes: string | null; created_at: string;
+  status?: string | null;
   photo_url: string | null;
   branches: { name: string } | null;
 };
@@ -57,7 +59,7 @@ type MemberClassBooking = {
   classes: { id: string; name: string; trainer_name: string | null; schedule_day: string; start_time: string; duration_mins: number; color: string } | null;
 };
 type ClassOption = { id: string; name: string; trainer_name: string | null; schedule_day: string; start_time: string; duration_mins: number; color: string };
-type Tab = "overview" | "diet" | "workout" | "classes" | "payments" | "visits";
+type Tab = "overview" | "onboarding" | "diet" | "workout" | "classes" | "payments" | "visits";
 
 const supabase = createClient();
 
@@ -593,6 +595,7 @@ type HeatDay = { date: string; count: number };
 
 const TAB_META: { key: Tab; label: string; icon: React.ElementType }[] = [
   { key: "overview", label: "Overview", icon: User },
+  { key: "onboarding", label: "Onboarding", icon: FileText },
   { key: "diet", label: "Diet", icon: Salad },
   { key: "workout", label: "Workout", icon: Dumbbell },
   { key: "classes", label: "Classes", icon: BookOpen },
@@ -763,7 +766,44 @@ export default function MemberProfilePage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [copy, setCopy] = useState<CopyState>(null);
   const [copyMembers, setCopyMembers] = useState<CopyMember[] | null>(null);
+  const [archiving, setArchiving] = useState(false);
   const { toast, show } = useToast();
+
+  const isArchived = member?.status === "archived" || member?.status === "deleted";
+
+  async function handleArchive() {
+    if (!member) return;
+    if (!confirm(`Are you sure you want to archive ${member.full_name}? They will be hidden from the active members list.`)) return;
+    setArchiving(true);
+    try {
+      const res = await supabase.from("members").update({ status: "archived" }).eq("id", member.id);
+      if (res.error && res.error.code === "23514") {
+        const { error: delErr } = await supabase.from("members").update({ status: "deleted" }).eq("id", member.id);
+        if (delErr) throw delErr;
+      }
+      setMember((prev) => (prev ? { ...prev, status: "archived" } : prev));
+      show(`${member.full_name} has been archived`);
+    } catch (err: any) {
+      show("Could not archive member: " + (err?.message || "Unknown error"), "error");
+    } finally {
+      setArchiving(false);
+    }
+  }
+
+  async function handleRestore() {
+    if (!member) return;
+    setArchiving(true);
+    try {
+      const { error } = await supabase.from("members").update({ status: "active" }).eq("id", member.id);
+      if (error) throw error;
+      setMember((prev) => (prev ? { ...prev, status: "active" } : prev));
+      show(`${member.full_name} has been restored to active members`);
+    } catch (err: any) {
+      show("Could not restore member: " + (err?.message || "Unknown error"), "error");
+    } finally {
+      setArchiving(false);
+    }
+  }
 
   const loadOnboardingStatus = useCallback(async () => {
     try {
@@ -851,6 +891,11 @@ export default function MemberProfilePage() {
       .select("id, version_number, status, valid_from, start_date, target_kcal, plan_mode, plan_days, created_at")
       .eq("member_id", id).order("created_at", { ascending: false });
     setDietPlans((data as DietPlan[]) || []);
+  }, [id]);
+
+  const reloadMember = useCallback(async () => {
+    const { data: updatedM } = await supabase.from("members").select("*, branches(name)").eq("id", id).single();
+    if (updatedM) setMember(updatedM as Member);
   }, [id]);
 
   useEffect(() => {
@@ -994,8 +1039,30 @@ export default function MemberProfilePage() {
   const daysLeft = currentMembership?.end_date ? Math.ceil((new Date(currentMembership.end_date).getTime() - Date.now()) / 86400000) : null;
   const totalDays = currentMembership?.end_date && currentMembership?.start_date ? Math.max(1, Math.round((new Date(currentMembership.end_date).getTime() - new Date(currentMembership.start_date).getTime()) / 86400000)) : null;
   const used = totalDays && daysLeft !== null ? Math.min(1, Math.max(0, (totalDays - daysLeft) / totalDays)) : 0;
-  const tone: "green" | "amber" | "red" | "grey" = !currentMembership ? "grey" : daysLeft === null ? "green" : daysLeft < 0 ? "red" : daysLeft <= 7 ? "amber" : "green";
-  const statusLabel = !currentMembership ? "No active plan" : daysLeft === null ? "Active" : daysLeft < 0 ? `Expired ${Math.abs(daysLeft)}d ago` : daysLeft === 0 ? "Ends today" : daysLeft <= 7 ? `${daysLeft}d left` : "Active";
+  const tone: "green" | "amber" | "red" | "grey" = isArchived
+    ? "grey"
+    : !currentMembership
+    ? "grey"
+    : daysLeft === null
+    ? "green"
+    : daysLeft < 0
+    ? "red"
+    : daysLeft <= 7
+    ? "amber"
+    : "green";
+  const statusLabel = isArchived
+    ? "Archived"
+    : !currentMembership
+    ? "No active plan"
+    : daysLeft === null
+    ? "Active"
+    : daysLeft < 0
+    ? `Expired ${Math.abs(daysLeft)}d ago`
+    : daysLeft === 0
+    ? "Ends today"
+    : daysLeft <= 7
+    ? `${daysLeft}d left`
+    : "Active";
 
   const waChatMsg = `Hi ${first}! How is your workout and fitness routine going? Let us know if you need any assistance!`;
   const waChatUrl = member?.phone ? waLink(member.phone, waChatMsg) : null;
@@ -1011,8 +1078,13 @@ export default function MemberProfilePage() {
     ? `Hi ${first}, your ${active.membership_plans?.name ?? ""} membership ${daysLeft !== null && daysLeft < 0 ? "ended" : "ends"} on ${formatDate(active.end_date, { year: true })}. Reply here to renew.`
     : `Hi ${first}!`;
 
-  const counts: Partial<Record<Tab, number>> = {
-    diet: dietPlans.length, workout: assignedPrograms.length, classes: classBookings.length, payments: payments.length, visits: attendance.length,
+  const counts: Partial<Record<Tab, number | string>> = {
+    onboarding: onboardingStatus === "submitted" ? "New" : undefined,
+    diet: dietPlans.length,
+    workout: assignedPrograms.length,
+    classes: classBookings.length,
+    payments: payments.length,
+    visits: attendance.length,
   };
 
   const fmt12 = (t: string) => {
@@ -1048,6 +1120,11 @@ export default function MemberProfilePage() {
     { label: "Book a class", icon: BookOpen, run: () => setBookClassSheetOpen(true) },
     ...(activeDiet ? [{ label: "Copy diet plan", icon: Copy, run: () => openCopy("diet", activeDiet.id) }] : []),
     ...(activeProgram ? [{ label: "Copy workout", icon: Copy, run: () => openCopy("workout", activeProgram.id) }] : []),
+    {
+      label: isArchived ? "Restore Member" : "Archive Member",
+      icon: isArchived ? ArchiveRestore : Archive,
+      run: isArchived ? handleRestore : handleArchive,
+    },
   ];
 
   // Overview cards, keyed for the editable layout. Notes only exists when there are notes.
@@ -1055,7 +1132,7 @@ export default function MemberProfilePage() {
     onboarding: (
       <section className="mp-card">
         <div className="mp-card-h">
-          <h2><FileText size={15} /> Member Onboarding</h2>
+          <h2>Member Onboarding</h2>
           <div style={{ display: "flex", gap: 6 }}>
             {onboardingStatus === "submitted" ? (
               <button
@@ -1306,6 +1383,22 @@ export default function MemberProfilePage() {
             </div>
             <div className="mp-hero-title-row">
               <h1>{member.full_name}</h1>
+              {isArchived && (
+                <span
+                  className="mp-pill"
+                  style={{
+                    background: "rgba(255, 255, 255, 0.22)",
+                    color: "#ffffff",
+                    border: "1px solid rgba(255, 255, 255, 0.35)",
+                    fontSize: 12,
+                    fontWeight: 700,
+                    textTransform: "uppercase",
+                    letterSpacing: "0.04em",
+                  }}
+                >
+                  Archived
+                </span>
+              )}
               {waChatUrl && (
                 <a
                   href={waChatUrl}
@@ -1376,6 +1469,30 @@ export default function MemberProfilePage() {
               </button>
             )}
             <Link href={`/dashboard/members/${member.id}/edit`} className="mp-glass"><Pencil size={15} /><span>Edit</span></Link>
+            {isArchived ? (
+              <button
+                type="button"
+                className="mp-glass"
+                style={{ background: "rgba(59, 130, 246, 0.2)", borderColor: "#3b82f6", color: "#60a5fa" }}
+                onClick={handleRestore}
+                disabled={archiving}
+                title="Restore this member to active status"
+              >
+                {archiving ? <Loader2 size={15} className="ps-spin" /> : <ArchiveRestore size={15} />}
+                <span>Restore</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="mp-glass"
+                onClick={handleArchive}
+                disabled={archiving}
+                title="Archive this member"
+              >
+                {archiving ? <Loader2 size={15} className="ps-spin" /> : <Archive size={15} />}
+                <span>Archive</span>
+              </button>
+            )}
             <button type="button" className="mp-glass mp-glass--solid mp-hide-sm" onClick={toggleCheckIn} disabled={busy}>
               {busy ? <Loader2 size={15} className="ps-spin" /> : openVisit ? <LogOut size={15} /> : <LogIn size={15} />}
               <span>{openVisit ? "Check out" : "Check in"}</span>
@@ -1434,7 +1551,31 @@ export default function MemberProfilePage() {
       </header>
 
       {/* ── Alerts ── */}
-      {active && daysLeft !== null && daysLeft <= 7 && (
+      {isArchived && (
+        <div
+          className="mp-alert"
+          style={{
+            background: "rgba(100, 116, 139, 0.12)",
+            borderColor: "rgba(100, 116, 139, 0.3)",
+            color: "var(--text-secondary)",
+          }}
+          role="status"
+        >
+          <Archive size={16} style={{ color: "#64748b" }} />
+          <span>This member is currently <strong>Archived</strong> and hidden from the active members list.</span>
+          <button
+            type="button"
+            className="ps-btn ps-btn--primary ps-btn--sm"
+            onClick={handleRestore}
+            disabled={archiving}
+          >
+            {archiving ? <Loader2 size={13} className="ps-spin" /> : <ArchiveRestore size={13} />}
+            Restore Member
+          </button>
+        </div>
+      )}
+
+      {active && !isArchived && daysLeft !== null && daysLeft <= 7 && (
         <div className={`mp-alert mp-alert--${daysLeft < 0 ? "red" : "amber"}`}>
           <AlertTriangle size={16} />
           <span>{daysLeft < 0 ? `Membership expired ${Math.abs(daysLeft)} day${daysLeft === -1 ? "" : "s"} ago.` : daysLeft === 0 ? "Membership ends today." : `Membership ends in ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`}</span>
@@ -1487,6 +1628,20 @@ export default function MemberProfilePage() {
             </SortableContext>
           </DndContext>
         </>
+      )}
+
+      {/* ── Onboarding ── */}
+      {tab === "onboarding" && member && (
+        <MemberOnboardingTab
+          member={member}
+          onboardingStatus={onboardingStatus}
+          onOpenReview={() => setReviewOnboardingOpen(true)}
+          onOpenSend={() => setSendOnboardingOpen(true)}
+          onReload={() => {
+            loadOnboardingStatus();
+            reloadMember();
+          }}
+        />
       )}
 
       {/* ── Diet ── */}
@@ -1702,8 +1857,8 @@ export default function MemberProfilePage() {
           onClose={() => setReviewOnboardingOpen(false)}
           onSynced={async () => {
             setOnboardingStatus("synced");
-            const { data: updatedM } = await supabase.from("members").select("*, branches(name)").eq("id", id).single();
-            if (updatedM) setMember(updatedM as Member);
+            await reloadMember();
+            loadOnboardingStatus();
             show("Member profile synced & approved");
           }}
         />

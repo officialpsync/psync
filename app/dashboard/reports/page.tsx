@@ -224,7 +224,6 @@ function Card({ title, icon: Icon, sub, right, children }: { title: string; icon
   return (
     <section className="rp-card">
       <header className="rp-card-h">
-        <span className="rp-card-icon"><Icon size={14} /></span>
         <div className="rp-card-t"><h3>{title}</h3>{sub && <small>{sub}</small>}</div>
         {right}
       </header>
@@ -279,7 +278,6 @@ function DetailTable<R>({ title, rows, cols, defaultSort, empty, file }: {
   return (
     <section className="rp-card rp-table">
       <header className="rp-card-h">
-        <span className="rp-card-icon"><BarChart3 size={14} /></span>
         <div className="rp-card-t"><h3>{title}</h3><small>{list.length} row{list.length === 1 ? "" : "s"}{term ? ` matching "${q.trim()}"` : ""}</small></div>
         <label className="rp-tsearch"><input type="search" placeholder="Search this table" value={q} onChange={(e) => setQ(e.target.value)} /></label>
         <button type="button" className="rp-tbtn" onClick={csv}><Download size={13} />CSV</button>
@@ -857,7 +855,6 @@ export default function ReportsPage() {
       {/* Header + filters */}
       <header className="rp-head">
         <div className="rp-title">
-          <span className="rp-title-icon"><BarChart3 size={20} /></span>
           <div><h1>Reports</h1><p>{rangeLabel}{compare ? " · compared with the previous period" : ""}</p></div>
         </div>
         <div className="rp-head-actions">

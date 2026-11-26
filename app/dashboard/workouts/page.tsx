@@ -166,7 +166,6 @@ export default function WorkoutsPage() {
 
       <header className="wk-head">
         <div className="wk-title">
-          <span className="wk-title-icon"><Dumbbell size={21} /></span>
           <div>
             <h1>Workouts</h1>
             <p>{loading ? "\u00a0" : `${mine.length} plan${mine.length === 1 ? "" : "s"} · ${onPlan} member${onPlan === 1 ? "" : "s"} training`}</p>

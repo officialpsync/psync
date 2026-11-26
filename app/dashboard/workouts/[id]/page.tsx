@@ -198,7 +198,7 @@ export default function WorkoutPlanViewPage() {
 
         <aside className="wv-side">
           <section className="wv-card">
-            <h3><Activity size={15} /> Muscle split</h3>
+            <h3>Muscle split</h3>
             {summary.split.length === 0 ? <p className="wv-muted">No exercises yet.</p> : (
               <>
                 <div className="wv-splitbar">
@@ -220,14 +220,14 @@ export default function WorkoutPlanViewPage() {
 
           {summary.equip.length > 0 && (
             <section className="wv-card">
-              <h3><Wrench size={15} /> Equipment needed</h3>
+              <h3>Equipment needed</h3>
               <div className="wv-equip">{summary.equip.map((e) => <span key={e}>{EQUIPMENT_LABELS[e] ?? e}</span>)}</div>
             </section>
           )}
 
           {prog.notes && (
             <section className="wv-card wv-notes">
-              <h3><StickyNote size={15} /> Trainer notes</h3>
+              <h3>Trainer notes</h3>
               <p>{prog.notes}</p>
             </section>
           )}

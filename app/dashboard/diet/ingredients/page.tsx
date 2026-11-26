@@ -135,7 +135,6 @@ export default function IngredientsPage() {
 
       <header className="dt-head">
         <div className="dt-title">
-          <span className="dt-title-icon"><Carrot size={21} /></span>
           <div>
             <h1>Ingredients</h1>
             <p>{loading ? "\u00a0" : `${stats.total} ingredients · ${stats.mine} added by your gym, visible only to you`}</p>

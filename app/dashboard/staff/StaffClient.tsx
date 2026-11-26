@@ -238,7 +238,6 @@ export default function StaffClient() {
 
       <header className="sf-head">
         <div className="sf-title">
-          <span className="sf-title-icon"><Users size={21} /></span>
           <div>
             <h1>Staff</h1>
             <p>{fetched ? `${activeCount} active · ${withLogin} with a login${inactiveCount ? ` · ${inactiveCount} inactive` : ""}` : "\u00a0"}</p>

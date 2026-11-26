@@ -148,7 +148,6 @@ export default function DietPlansPage() {
 
       <header className="dt-head">
         <div className="dt-title">
-          <span className="dt-title-icon"><Salad size={21} /></span>
           <div>
             <h1>Diet plans</h1>
             <p>{loading ? "\u00a0" : `${stats.activeCount} active plan${stats.activeCount === 1 ? "" : "s"} across ${stats.members} member${stats.members === 1 ? "" : "s"}`}</p>

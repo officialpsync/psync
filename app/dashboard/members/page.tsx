@@ -10,7 +10,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus, Search, X, SlidersHorizontal, ChevronRight, ChevronLeft, ChevronDown, Check,
   Download, Bookmark, Trash2, ArrowUpDown, Users, Loader2, FileSpreadsheet, FileText, RefreshCw,
-  Upload, Pin, ArrowLeftRight,
+  Upload, Pin, ArrowLeftRight, Archive, ArchiveRestore,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -121,6 +121,7 @@ type StatusKey = "active" | "expiring" | "expired" | "none";
 type Member = MemberRaw & {
   status: StatusKey;
   memberStatus: "active" | "inactive";
+  isArchived: boolean;
   plan: string | null;
   planId: string | null;
   planPricePaise: number | null;
@@ -135,6 +136,7 @@ type Member = MemberRaw & {
 };
 
 function enrich(m: MemberRaw, diet: Set<string>, workout: Set<string>): Member {
+  const isArchived = m.status === "archived" || m.status === "deleted";
   const list = m.memberships ?? [];
   const active = list.find((x) => x.status === "active");
   const latest = active ?? [...list].sort((a, b) => (b.end_date ?? "").localeCompare(a.end_date ?? ""))[0];
@@ -152,6 +154,7 @@ function enrich(m: MemberRaw, diet: Set<string>, workout: Set<string>): Member {
     ...m,
     status,
     memberStatus,
+    isArchived,
     daysLeft,
     age,
     plan: latest?.membership_plans?.name ?? null,
@@ -175,7 +178,7 @@ const STATUS: Record<StatusKey, { label: string; cls: string }> = {
 
 // ── Filters ──────────────────────────────────────────────────────────────────
 
-type Tab = "all" | StatusKey;
+type Tab = "all" | StatusKey | "archived";
 type YesNo = "any" | "yes" | "no";
 type Filters = {
   plans: string[]; gender: string[]; ageMin: string; ageMax: string;
@@ -765,6 +768,37 @@ export default function MembersPage() {
     }
   }
 
+  async function handleRestoreMember(m: Member) {
+    setChangingStatusId(m.id);
+    try {
+      const { error } = await supabase.from("members").update({ status: "active" }).eq("id", m.id);
+      if (error) throw error;
+      show(`${m.full_name} restored to active members`);
+      await load();
+    } catch (err: any) {
+      show("Could not restore member: " + (err?.message || "Unknown error"), "error");
+    } finally {
+      setChangingStatusId(null);
+    }
+  }
+
+  async function handleArchiveMember(m: Member) {
+    if (!confirm(`Are you sure you want to archive ${m.full_name}?`)) return;
+    setChangingStatusId(m.id);
+    try {
+      const res = await supabase.from("members").update({ status: "archived" }).eq("id", m.id);
+      if (res.error && res.error.code === "23514") {
+        await supabase.from("members").update({ status: "deleted" }).eq("id", m.id);
+      }
+      show(`${m.full_name} archived`);
+      await load();
+    } catch (err: any) {
+      show("Could not archive member: " + (err?.message || "Unknown error"), "error");
+    } finally {
+      setChangingStatusId(null);
+    }
+  }
+
   // Click outside to dismiss search suggestions
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
@@ -857,12 +891,23 @@ export default function MembersPage() {
   const base = useMemo(() => members.filter((m) => matches(m, filters)
     && (!q || m.full_name.toLowerCase().includes(q) || (m.phone ?? "").includes(q) || (m.email ?? "").toLowerCase().includes(q))), [members, filters, q]);
   const counts = useMemo(() => {
-    const c: Record<Tab, number> = { all: base.length, active: 0, expiring: 0, expired: 0, none: 0 };
-    base.forEach((m) => { c[m.status]++; });
+    const c: Record<Tab, number> = { all: 0, active: 0, expiring: 0, expired: 0, none: 0, archived: 0 };
+    base.forEach((m) => {
+      if (m.isArchived) {
+        c.archived++;
+      } else {
+        c.all++;
+        c[m.status]++;
+      }
+    });
     return c;
   }, [base]);
   const rows = useMemo(() => {
-    const r = base.filter((m) => tab === "all" || m.status === tab);
+    const r = base.filter((m) => {
+      if (tab === "archived") return m.isArchived;
+      if (m.isArchived) return false;
+      return tab === "all" || m.status === tab;
+    });
     const by: Record<SortKey, (a: Member, b: Member) => number> = {
       newest: (a, b) => b.created_at.localeCompare(a.created_at),
       oldest: (a, b) => a.created_at.localeCompare(b.created_at),
@@ -1047,8 +1092,12 @@ export default function MembersPage() {
   }
 
   const TABS: { key: Tab; label: string }[] = [
-    { key: "all", label: "All" }, { key: "active", label: "Active" }, { key: "expiring", label: "Expiring" },
-    { key: "expired", label: "Expired" }, { key: "none", label: "No plan" },
+    { key: "all", label: "All" },
+    { key: "active", label: "Active" },
+    { key: "expiring", label: "Expiring" },
+    { key: "expired", label: "Expired" },
+    { key: "none", label: "No plan" },
+    { key: "archived", label: "Archived" },
   ];
   const dirty = tab !== "all" || chips.length > 0;
 
@@ -1058,7 +1107,6 @@ export default function MembersPage() {
 
       <header className="mb-head">
         <div className="mb-head-title">
-          <span className="mb-head-icon"><Users size={20} /></span>
           <div>
           <h1>Members</h1>
           <p>{loading ? "\u00a0" : `${members.length} member${members.length === 1 ? "" : "s"} · ${members.filter((m) => m.status === "active" || m.status === "expiring").length} active`}</p>
@@ -1502,19 +1550,35 @@ export default function MembersPage() {
             </div>
           )) : rows.length === 0 ? (
             <div className="mb-empty">
-              <span className="mb-empty-icon"><Users size={20} /></span>
-              <strong>{members.length === 0 ? "No members yet" : "No members match"}</strong>
-              <p>{members.length === 0 ? "Add your first member to start tracking plans, payments and attendance." : "Try a different search, or loosen the filters."}</p>
-              {members.length === 0
-                ? <Link href="/dashboard/members/new" className="ps-btn ps-btn--primary ps-btn--sm"><Plus size={15} /> Add member</Link>
-                : <button type="button" className="ps-btn ps-btn--secondary ps-btn--sm" onClick={clearAll}>Clear filters</button>}
+              <span className="mb-empty-icon">{tab === "archived" ? <Archive size={20} /> : <Users size={20} />}</span>
+              <strong>{tab === "archived" ? "No archived members" : members.length === 0 ? "No members yet" : "No members match"}</strong>
+              <p>
+                {tab === "archived"
+                  ? "Members that you archive from their profile will appear here."
+                  : members.length === 0
+                  ? "Add your first member to start tracking plans, payments and attendance."
+                  : "Try a different search, or loosen the filters."}
+              </p>
+              {tab === "archived" ? null : members.length === 0 ? (
+                <Link href="/dashboard/members/new" className="ps-btn ps-btn--primary ps-btn--sm"><Plus size={15} /> Add member</Link>
+              ) : (
+                <button type="button" className="ps-btn ps-btn--secondary ps-btn--sm" onClick={clearAll}>Clear filters</button>
+              )}
             </div>
           ) : pageRows.map((m) => {
-            const isActive = m.memberStatus !== "inactive" && (m.status === "active" || m.status === "expiring");
+            const isArchived = m.isArchived;
+            const isActive = !isArchived && m.memberStatus !== "inactive" && (m.status === "active" || m.status === "expiring");
             const isBusy = changingStatusId === m.id;
 
             return (
-              <Link key={m.id} href={`/dashboard/members/${m.id}`} className="mb-tr mb-row" role="row" data-status={isActive ? "active" : "expired"}>
+              <Link
+                key={m.id}
+                href={`/dashboard/members/${m.id}`}
+                className="mb-tr mb-row"
+                role="row"
+                data-status={isArchived ? "archived" : isActive ? "active" : "expired"}
+                data-archived={isArchived}
+              >
                 {/* 1. Name | Age | Sex | WA icon */}
                 <span className="mb-who">
                   <Avatar name={m.full_name} size={36} />
@@ -1574,26 +1638,43 @@ export default function MembersPage() {
                   </small>
                 </span>
 
-                {/* 3. Status - active & inactive (toggle only) */}
+                {/* 3. Status - active & inactive (toggle only) or Archived badge */}
                 <div className="mb-status-cell" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={isActive}
-                    disabled={isBusy}
-                    className={`mb-toggle ${isActive ? "mb-toggle--on" : "mb-toggle--off"}`}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      handleQuickStatusChange(m, isActive ? "inactive" : "active");
-                    }}
-                    title={`Status: ${isActive ? "Active" : "Inactive"}. Click to toggle.`}
-                    aria-label={`Toggle active status for ${m.full_name}`}
-                  >
-                    <span className="mb-toggle-thumb">
-                      {isBusy && <Loader2 size={9} className="ps-spin" />}
+                  {isArchived ? (
+                    <span
+                      className="ps-badge"
+                      style={{
+                        background: "rgba(100, 116, 139, 0.12)",
+                        color: "#64748b",
+                        border: "1px solid rgba(100, 116, 139, 0.25)",
+                        fontSize: 11,
+                        fontWeight: 600,
+                        padding: "2px 8px",
+                        borderRadius: 6,
+                      }}
+                    >
+                      Archived
                     </span>
-                  </button>
+                  ) : (
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={isActive}
+                      disabled={isBusy}
+                      className={`mb-toggle ${isActive ? "mb-toggle--on" : "mb-toggle--off"}`}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleQuickStatusChange(m, isActive ? "inactive" : "active");
+                      }}
+                      title={`Status: ${isActive ? "Active" : "Inactive"}. Click to toggle.`}
+                      aria-label={`Toggle active status for ${m.full_name}`}
+                    >
+                      <span className="mb-toggle-thumb">
+                        {isBusy && <Loader2 size={9} className="ps-spin" />}
+                      </span>
+                    </button>
+                  )}
                 </div>
 
                 {/* 4. Amount */}
@@ -1601,21 +1682,38 @@ export default function MembersPage() {
                   <span className="mb-price-val">{m.planPricePaise ? formatINR(m.planPricePaise) : "—"}</span>
                 </span>
 
-                {/* 5. Action - Renew */}
+                {/* 5. Action - Renew or Restore */}
                 <span className="mb-actions" onClick={(e) => { e.preventDefault(); e.stopPropagation(); }}>
-                  <button
-                    type="button"
-                    className="ps-btn ps-btn--primary ps-btn--sm mb-renew-btn"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      setRenewMember(m);
-                    }}
-                    title={`Renew membership for ${m.full_name}`}
-                  >
-                    <RefreshCw size={12} />
-                    <span>Renew</span>
-                  </button>
+                  {isArchived ? (
+                    <button
+                      type="button"
+                      className="ps-btn ps-btn--secondary ps-btn--sm"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleRestoreMember(m);
+                      }}
+                      title={`Restore ${m.full_name} to active members`}
+                      disabled={isBusy}
+                    >
+                      {isBusy ? <Loader2 size={12} className="ps-spin" /> : <ArchiveRestore size={12} />}
+                      <span>Restore</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="ps-btn ps-btn--primary ps-btn--sm mb-renew-btn"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setRenewMember(m);
+                      }}
+                      title={`Renew membership for ${m.full_name}`}
+                    >
+                      <RefreshCw size={12} />
+                      <span>Renew</span>
+                    </button>
+                  )}
                 </span>
               </Link>
             );
@@ -1733,6 +1831,7 @@ const CSS = `
 .mb-tabs button[aria-selected="true"][data-tone="active"] .mb-count { background: rgba(52, 199, 89, 0.15) !important; color: #248a47 !important; }
 .mb-tabs button[aria-selected="true"][data-tone="expiring"] .mb-count { background: rgba(255, 159, 10, 0.15) !important; color: #c46800 !important; }
 .mb-tabs button[aria-selected="true"][data-tone="expired"] .mb-count { background: rgba(255, 59, 48, 0.15) !important; color: #c4001a !important; }
+.mb-tabs button[aria-selected="true"][data-tone="archived"] .mb-count { background: rgba(100, 116, 139, 0.16) !important; color: #475569 !important; }
 
 /* Radio button tab selection */
 .mb-tab-radio { width: 16px; height: 16px; border-radius: 50%; border: 1.8px solid #c7cad1; background: transparent; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; transition: all 150ms ease; }
@@ -1741,10 +1840,12 @@ const CSS = `
 .mb-tabs button[data-tone="active"] .mb-tab-radio--checked { border-color: #34c759 !important; }
 .mb-tabs button[data-tone="expiring"] .mb-tab-radio--checked { border-color: #ff9f0a !important; }
 .mb-tabs button[data-tone="expired"] .mb-tab-radio--checked { border-color: #ff3b30 !important; }
+.mb-tabs button[data-tone="archived"] .mb-tab-radio--checked { border-color: #64748b !important; }
 .mb-tab-radio-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent, #0a84ff); }
 .mb-tabs button[data-tone="active"] .mb-tab-radio-dot { background: #34c759; }
 .mb-tabs button[data-tone="expiring"] .mb-tab-radio-dot { background: #ff9f0a; }
 .mb-tabs button[data-tone="expired"] .mb-tab-radio-dot { background: #ff3b30; }
+.mb-tabs button[data-tone="archived"] .mb-tab-radio-dot { background: #64748b; }
 .dark .mb-tab-radio { border-color: #52525b; }
 
 .mb-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px; flex-wrap: wrap; }
@@ -2131,12 +2232,15 @@ const CSS = `
 .dark .mb-tabs button[aria-selected="true"][data-tone="active"] .mb-count { background: rgba(52, 199, 89, 0.2) !important; color: #34c759 !important; }
 .dark .mb-tabs button[aria-selected="true"][data-tone="expiring"] .mb-count { background: rgba(255, 159, 10, 0.2) !important; color: #ff9f0a !important; }
 .dark .mb-tabs button[aria-selected="true"][data-tone="expired"] .mb-count { background: rgba(255, 69, 58, 0.2) !important; color: #ff6961 !important; }
+.dark .mb-tabs button[aria-selected="true"][data-tone="archived"] .mb-count { background: rgba(148, 163, 184, 0.2) !important; color: #94a3b8 !important; }
 .mb-th { background: linear-gradient(180deg, #f7f8fb, #f2f4f8); }
 .mb-row { position: relative; }
 .mb-row::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; border-radius: 0 3px 3px 0; background: transparent; }
 .mb-row[data-status="active"]::before { background: #34c759; }
 .mb-row[data-status="expiring"]::before { background: #ff9f0a; }
 .mb-row[data-status="expired"]::before { background: #ff3b30; }
+.mb-row[data-status="archived"]::before { background: #64748b; }
+.mb-row[data-archived="true"] { opacity: 0.82; }
 .mb-plan { display: inline-block; max-width: 100%; overflow: hidden; text-overflow: ellipsis; padding: 2px 9px; border-radius: 7px; background: #eef4ff; color: #0b5cc0; font-weight: 600; font-size: 12.5px; }
 .mb-show-sm { display: none !important; }
 @media (max-width: 760px) {

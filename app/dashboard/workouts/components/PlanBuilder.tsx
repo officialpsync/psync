@@ -279,10 +279,8 @@ export function PlanBuilder({ programId, initial }: { programId?: string; initia
 
       <header className="wk-head">
         <div className="wk-title">
-          <span className="wk-title-icon" style={{ background: `linear-gradient(135deg, ${gt.from}, ${gt.to})` }}><Dumbbell size={21} /></span>
           <div>
             <h1>{isEdit ? "Edit plan" : "New plan"}</h1>
-            <p>{stats.exercises > 0 ? `${stats.exercises} exercises · ${stats.sets} sets a week` : "Set the basics, then add exercises to each training day."}</p>
           </div>
         </div>
       </header>
@@ -292,7 +290,7 @@ export function PlanBuilder({ programId, initial }: { programId?: string; initia
       <div className="pb-layout">
         <div className="pb-main">
           <section className="pb-card">
-            <div className="pb-card-h"><span className="pb-card-icon"><ClipboardList size={17} /></span><div><h2>Plan details</h2><p>What it&apos;s for and how long it runs</p></div></div>
+            <div className="pb-card-h"><div><h2>Plan details</h2><p>What it&apos;s for and how long it runs</p></div></div>
 
             <div className="db-fieldset">
               <label className="db-fieldset-label" htmlFor="plan-name">Plan name</label>
@@ -359,7 +357,7 @@ export function PlanBuilder({ programId, initial }: { programId?: string; initia
           </section>
 
           <section className="pb-card">
-            <div className="pb-card-h"><span className="pb-card-icon"><CalendarDays size={17} /></span><div><h2>Training days</h2><p>Pick a day, then add its exercises in order</p></div></div>
+            <div className="pb-card-h"><div><h2>Training days</h2><p>Pick a day, then add its exercises in order</p></div></div>
 
             <div className="pb-days" role="group" aria-label="Choose a day">
               {plan.days.map((d, i) => (
@@ -427,7 +425,7 @@ export function PlanBuilder({ programId, initial }: { programId?: string; initia
           </div>
 
           <section className="pb-card pb-side-card">
-            <h3><Activity size={15} /> Muscle split</h3>
+            <h3>Muscle split</h3>
             {stats.split.length === 0 ? <p className="pb-muted">Add exercises to see which muscles this plan works.</p> : (
               <div className="pb-split">
                 {stats.split.map(([m, n]) => (
