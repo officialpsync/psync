@@ -981,7 +981,7 @@ export const SIDEBAR_CSS = `
   clip-path:inset(0 -56px 0 0);          /* negative inset lets the shadow escape the clip */
   transition-duration:220ms;
 }
-.ps-sidebar.db-sb[data-state="flyout"]{box-shadow:0 0 0 1px var(--sidebar-border,rgba(60,60,67,.12)),0 24px 56px rgba(0,0,0,.16)}
+.ps-sidebar.db-sb[data-state="flyout"]{z-index:80;box-shadow:0 0 0 1px var(--sidebar-border,rgba(60,60,67,.12)),0 24px 56px rgba(0,0,0,.16)}
 .ps-sidebar.db-sb[data-state="pinned"]{box-shadow:1px 0 0 var(--sidebar-border,rgba(60,60,67,.12))}
 .db-sb-edge{position:absolute;top:0;bottom:0;left:calc(var(--sb-rail) - 1px);width:1px;background:var(--sidebar-border,rgba(60,60,67,.12));pointer-events:none;transition:opacity 120ms ease}
 .db-sb[data-open="true"] .db-sb-edge{opacity:0}

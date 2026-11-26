@@ -12,7 +12,7 @@ import {
   TrendingUp, UserPlus2, Gauge, ClipboardCheck,
 } from "lucide-react";
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
+  ComposedChart, AreaChart, Area, BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Cell,
 } from "recharts";
 import {
   DndContext, closestCenter, PointerSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent,
@@ -26,6 +26,7 @@ import { Sheet } from "./components/Sheet";
 import { DesignStyles } from "./components/DesignSystem";
 import { useRole } from "./components/useRole";
 import { getStoredTheme, toggleTheme, THEME_EVENT } from "./components/brand";
+import { MemberActivityFeed } from "./components/MemberActivityFeed";
 
 /* ───────────────────────── Types ───────────────────────── */
 
@@ -163,7 +164,7 @@ const WIDGETS: { id: WidgetId; label: string; sub: string; sizes: Span[]; def: S
   { id: "mtd", label: "Month to date", sub: "This month vs the same days last month", sizes: [6, 12], def: 12 },
   { id: "revenue", label: "Revenue trend", sub: "Monthly collections", sizes: [6, 8, 12], def: 8 },
   { id: "turnout", label: "Today's turnout", sub: "Check-ins vs active members", sizes: [4, 6, 8, 12], def: 4 },
-  { id: "tasks", label: "Today's updates", sub: "Follow-ups and renewals due", sizes: [4, 6, 8, 12], def: 4 },
+  { id: "tasks", label: "Gym Snapshot", sub: "Follow-ups and renewals due", sizes: [4, 6, 8, 12], def: 4 },
   { id: "checkins", label: "Weekly check-ins", sub: "Last 7 days", sizes: [4, 6, 8, 12], def: 4 },
   { id: "expiring", label: "Expiring soon", sub: "Renewals due this week", sizes: [4, 6, 8, 12], def: 4 },
   { id: "payments", label: "Recent payments", sub: "Latest transactions", sizes: [4, 6, 8, 12], def: 4 },
@@ -330,14 +331,17 @@ function Ring({ count, pct: p, size = 148 }: { count?: number | null; pct: numbe
   );
 }
 
-function CardHead({ title, sub, href, cta = "View all" }: { title: string; sub?: string; href?: string; cta?: string }) {
+function CardHead({ title, sub, href, cta = "View all", action }: { title: string; sub?: string; href?: string; cta?: string; action?: React.ReactNode }) {
   return (
     <div className="db-card-head">
       <div style={{ minWidth: 0 }}>
         <h2 className="db-card-title">{title}</h2>
         {sub && <div className="db-card-sub">{sub}</div>}
       </div>
-      {href && <Link href={href} className="db-link">{cta}<ChevronRight size={14} /></Link>}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+        {action}
+        {href && <Link href={href} className="db-link">{cta}<ChevronRight size={14} /></Link>}
+      </div>
     </div>
   );
 }
@@ -928,24 +932,53 @@ export default function DashboardPage() {
           <CardHead
             title="Revenue"
             sub={revenueSeries.length ? `₹${compact(rupees(revenueTotal))} collected in the last ${prefs.revenueMonths} months` : `Last ${prefs.revenueMonths} months`}
-            href="/dashboard/reports" cta="Reports"
+            href="/dashboard/reports"
+            cta="Reports"
           />
           <div className="db-chart">
             {revenueSeries.length === 0 ? <Skeleton w="100%" h={220} r={12} /> : (
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={revenueSeries} margin={{ top: 10, right: 6, left: -12, bottom: 0 }}>
+                <ComposedChart data={revenueSeries} margin={{ top: 10, right: 6, left: -12, bottom: 0 }}>
                   <defs>
                     <linearGradient id="rev-fill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0A66D6" stopOpacity={0.22} />
-                      <stop offset="100%" stopColor="#0A66D6" stopOpacity={0} />
+                      <stop offset="0%" stopColor="#0A66D6" stopOpacity={0.24} />
+                      <stop offset="100%" stopColor="#0A66D6" stopOpacity={0.02} />
+                    </linearGradient>
+                    <linearGradient id="rev-bar-grad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#0a66d6" stopOpacity={0.78} />
+                      <stop offset="100%" stopColor="#0a66d6" stopOpacity={0.32} />
+                    </linearGradient>
+                    <linearGradient id="rev-bar-latest" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#2563eb" stopOpacity={1} />
+                      <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.75} />
                     </linearGradient>
                   </defs>
                   <CartesianGrid vertical={false} stroke="rgba(60,60,67,0.08)" />
                   <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11.5, fill: "#8a8a8e" }} />
                   <YAxis tickLine={false} axisLine={false} width={52} tick={{ fontSize: 11.5, fill: "#8a8a8e" }} tickFormatter={(v: number) => `₹${compact(rupees(v))}`} />
-                  <Tooltip content={<ChartTip money />} cursor={{ stroke: "rgba(10,102,214,0.25)" }} />
-                  <Area type="monotone" dataKey="value" stroke="#0A66D6" strokeWidth={2.2} fill="url(#rev-fill)" animationDuration={500} />
-                </AreaChart>
+                  <Tooltip content={<ChartTip money />} cursor={{ fill: "rgba(10,102,214,0.04)" }} />
+                  <Area
+                    type="monotone"
+                    dataKey="value"
+                    stroke="#0A66D6"
+                    strokeWidth={2.4}
+                    fill="url(#rev-fill)"
+                    animationDuration={500}
+                  />
+                  <Bar
+                    dataKey="value"
+                    radius={[5, 5, 0, 0]}
+                    maxBarSize={32}
+                    animationDuration={500}
+                  >
+                    {revenueSeries.map((_, i) => (
+                      <Cell
+                        key={i}
+                        fill={i === revenueSeries.length - 1 ? "url(#rev-bar-latest)" : "url(#rev-bar-grad)"}
+                      />
+                    ))}
+                  </Bar>
+                </ComposedChart>
               </ResponsiveContainer>
             )}
           </div>
@@ -1088,7 +1121,7 @@ export default function DashboardPage() {
           <section className="db-card db-pad db-updates-card">
             <div className="db-card-head" style={{ alignItems: "center" }}>
               <div style={{ minWidth: 0 }}>
-                <h2 className="db-card-title">Today&apos;s updates</h2>
+                <h2 className="db-card-title">Gym Snapshot</h2>
                 <div className="db-card-sub">{subPeriodText}</div>
               </div>
               <div className="db-period-toggle" role="group" aria-label="Updates time range">
@@ -1211,23 +1244,35 @@ export default function DashboardPage() {
         const rows = expiringFiltered;
         return (
           <section className="db-card db-pad">
-            <div className="db-card-head" style={{ alignItems: "center" }}>
-              <div style={{ minWidth: 0 }}>
-                <h2 className="db-card-title">Expiring soon</h2>
-                <div className="db-card-sub">Renewals due in {expiringDays} days</div>
+            <div className="db-card-head db-card-head--nowrap" style={{ alignItems: "center", flexWrap: "nowrap", gap: 8 }}>
+              <div style={{ minWidth: 0, flex: "1 1 auto" }}>
+                <h2 className="db-card-title" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Expiring soon</h2>
+                <div className="db-card-sub" style={{ whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Renewals due in {expiringDays} days</div>
               </div>
-              <div className="db-period-toggle" role="group" aria-label="Expiring days range">
-                {([7, 15, 30] as const).map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    className={clsx("db-period-btn", expiringDays === d && "active")}
-                    onClick={() => setExpiringDays(d)}
-                    aria-pressed={expiringDays === d}
-                  >
-                    {d} days
-                  </button>
-                ))}
+              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginLeft: "auto" }}>
+                <div className="db-period-toggle db-period-toggle--compact" role="group" aria-label="Expiring days range" style={{ flexShrink: 0, whiteSpace: "nowrap" }}>
+                  {([7, 15, 30] as const).map((d) => (
+                    <button
+                      key={d}
+                      type="button"
+                      className={clsx("db-period-btn", expiringDays === d && "active")}
+                      onClick={() => setExpiringDays(d)}
+                      aria-pressed={expiringDays === d}
+                      style={{ whiteSpace: "nowrap" }}
+                    >
+                      {d} days
+                    </button>
+                  ))}
+                </div>
+                <Link
+                  href="/dashboard/renewals"
+                  className="db-link"
+                  style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 28, height: 28, borderRadius: 6, padding: 0, color: "var(--text-secondary)", flexShrink: 0 }}
+                  title="Go to Member Renewals Tracker"
+                  aria-label="Go to Member Renewals Tracker"
+                >
+                  <ChevronRight size={18} strokeWidth={2.4} />
+                </Link>
               </div>
             </div>
             {rows === null ? <RowsSkeleton /> : rows.length === 0 ? (
@@ -1450,18 +1495,19 @@ export default function DashboardPage() {
       <header className="db-header db-in">
         <div style={{ minWidth: 0 }}>
           <h1 className="db-title">{greeting}</h1>
-          <p className="db-subtitle">Gym Snapshot</p>
         </div>
         <div className="db-header-actions">
           <Link
-            href="/dashboard/settings"
+            href="/dashboard/membership"
             className="db-sub-pill"
-            title="Gym subscription: 35 days left · View subscription & settings"
+            title="Gym subscription: 35 days left · View membership & renew details"
             aria-label="Gym subscription: 35 days left"
           >
             <span className="db-sub-dot" />
             <span>35 days left</span>
           </Link>
+
+          <MemberActivityFeed orgId={roleData.org_id || null} />
 
           <button
             type="button"
@@ -1751,6 +1797,10 @@ const OV_CSS = `
   transition: all 140ms ease;
   line-height: 1.3;
 }
+.ov .db-period-toggle--compact .db-period-btn {
+  padding: 3px 9px;
+  font-size: 11.5px;
+}
 .ov .db-period-btn:hover {
   color: var(--text-primary);
 }
@@ -1861,12 +1911,12 @@ html.dark .ov .db-period-btn.active {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 3px 9px;
+  padding: 3.5px 10px;
   border-radius: 999px;
-  background: rgba(220, 38, 38, 0.24);
-  border: 1px solid rgba(255, 69, 58, 0.5);
-  color: #ffffff;
-  backdrop-filter: blur(8px);
+  background: #dc2626 !important;
+  border: 1px solid rgba(255, 255, 255, 0.3) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 10px rgba(220, 38, 38, 0.45);
   animation: db-live-red-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 .db-live-beacon--red {
@@ -1882,7 +1932,7 @@ html.dark .ov .db-period-btn.active {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: #ff3b30;
+  background: #ffffff;
   opacity: 0.85;
   animation: db-live-red-radar 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
@@ -1891,7 +1941,7 @@ html.dark .ov .db-period-btn.active {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  border: 1.5px solid #ff3b30;
+  border: 1.5px solid #ffffff;
   opacity: 0.75;
   animation: db-live-red-radar 1.6s cubic-bezier(0, 0, 0.2, 1) infinite 0.5s;
 }
@@ -1900,8 +1950,8 @@ html.dark .ov .db-period-btn.active {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: #ff3b30;
-  box-shadow: 0 0 10px #ff3b30, 0 0 16px rgba(255, 59, 48, 0.85);
+  background: #ffffff;
+  box-shadow: 0 0 8px #ffffff;
 }
 
 @keyframes db-live-red-radar {
@@ -1911,10 +1961,10 @@ html.dark .ov .db-period-btn.active {
 
 @keyframes db-live-red-pulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.35), 0 0 12px rgba(255, 59, 48, 0.4);
+    box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.4), 0 0 10px rgba(220, 38, 38, 0.5);
   }
   50% {
-    box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.2), 0 0 20px rgba(255, 59, 48, 0.7);
+    box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.2), 0 0 18px rgba(220, 38, 38, 0.75);
   }
 }
 
@@ -2145,6 +2195,7 @@ html.dark .db-checkin-menu-item {
 
 .ov .db-pad { padding: 14px 16px; }
 .ov .db-card-head { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.ov .db-card-head--nowrap { flex-wrap: nowrap !important; }
 .ov .db-card-title { font-size: 15px; }
 .ov .db-chart { height: 200px; }
 .ov .db-chart--sm { height: 170px; }

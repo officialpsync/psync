@@ -253,6 +253,20 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ gymOccupancy }, { headers: CORS_HEADERS });
     }
 
+    let onboardingForm: any = null;
+    try {
+      const { data: obData } = await db
+        .from("member_onboarding_forms")
+        .select("id, status, access_token, custom_config, submitted_at, viewed_at, prefilled_data, draft_data")
+        .eq("member_id", targetId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      onboardingForm = obData;
+    } catch {
+      // Table might not exist yet
+    }
+
     return NextResponse.json(
       {
         member,
@@ -265,6 +279,10 @@ export async function GET(req: NextRequest) {
         bookings: bookings || [],
         recipes: recipes || [],
         gymOccupancy,
+        onboarding: onboardingForm || {
+          status: member.onboarding_status || "unassigned",
+          token: member.onboarding_token || null,
+        },
       },
       { headers: CORS_HEADERS }
     );

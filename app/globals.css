@@ -1572,47 +1572,47 @@ html.dark {
     color: var(--text-secondary) !important;
   }
 
-  /* Members page tabs: clean normal underline tabs, no pill backgrounds or borders in dark mode */
+  /* Members page tabs: radio button selection, no bottom borders, no dots */
   .mb-tabs {
     background: transparent !important;
     border: none !important;
-    border-bottom: 1px solid var(--border) !important;
+    border-bottom: none !important;
   }
   .mb-tabs button {
     background: transparent !important;
     border: none !important;
-    border-bottom: 2px solid transparent !important;
+    border-bottom: none !important;
     color: var(--text-secondary) !important;
     box-shadow: none !important;
   }
   .mb-tabs button:hover {
     color: #ffffff !important;
-    background: transparent !important;
+    background: var(--surface-3) !important;
   }
   .mb-tabs button[aria-selected="true"] {
     background: transparent !important;
     border: none !important;
-    border-bottom: 2px solid var(--accent) !important;
+    border-bottom: none !important;
     color: #ffffff !important;
     box-shadow: none !important;
   }
   .mb-tabs button[aria-selected="true"][data-tone="active"] {
-    border-bottom-color: #34c759 !important;
+    border-bottom: none !important;
     background: transparent !important;
     color: #ffffff !important;
   }
   .mb-tabs button[aria-selected="true"][data-tone="expiring"] {
-    border-bottom-color: #ff9f0a !important;
+    border-bottom: none !important;
     background: transparent !important;
     color: #ffffff !important;
   }
   .mb-tabs button[aria-selected="true"][data-tone="expired"] {
-    border-bottom-color: #ff453a !important;
+    border-bottom: none !important;
     background: transparent !important;
     color: #ffffff !important;
   }
   .mb-tabs button[aria-selected="true"][data-tone="none"] {
-    border-bottom-color: var(--text-secondary) !important;
+    border-bottom: none !important;
     background: transparent !important;
     color: #ffffff !important;
   }

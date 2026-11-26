@@ -13,7 +13,7 @@ import {
   LayoutGrid, Users, UserCheck, CalendarDays, Dumbbell, Salad,
   Wallet, Ticket, BarChart2, Settings, LogOut, Menu, ChevronRight, ChevronDown,
   ChefHat, UserPlus, UsersRound, ClipboardList, PanelLeftClose, PanelLeftOpen, Library, Carrot,
-  Pencil, Sun, Moon,
+  Pencil, Sun, Moon, Crown, RefreshCw,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { createClient } from "@/lib/supabase";
@@ -54,13 +54,15 @@ const INGREDIENTS: NavItem = { href: "/dashboard/diet/ingredients", label: "Ingr
 const TEMPLATES: NavItem  = { href: "/dashboard/diet/templates", label: "Diet templates", icon: ClipboardList, permKey: "diet" };
 const PAYMENTS: NavItem   = { href: "/dashboard/payments", label: "Payments", icon: Wallet, permKey: "payments" };
 const PLANS: NavItem      = { href: "/dashboard/membership-plans", label: "Membership plans", icon: Ticket, permKey: "membership_plans" };
+const RENEWALS: NavItem   = { href: "/dashboard/renewals", label: "Renewals", icon: RefreshCw, permKey: "members" };
 const REPORTS: NavItem    = { href: "/dashboard/reports", label: "Reports", icon: BarChart2, permKey: "reports" };
 const SETTINGS: NavItem   = { href: "/dashboard/settings", label: "Settings", icon: Settings, permKey: "settings" };
 const STAFF: NavItem      = { href: "/dashboard/staff", label: "Staff", icon: UsersRound };
+const MEMBERSHIP: NavItem = { href: "/dashboard/membership", label: "Membership", icon: Crown };
 
 /** Nutrition and billing each have 2–3 related pages, so they fold into a submenu. */
 const NUTRITION: NavGroup = { key: "nutrition", label: "Nutrition", icon: Salad, children: [DIET, RECIPES, INGREDIENTS, TEMPLATES] };
-const BILLING: NavGroup   = { key: "billing", label: "Billing", icon: Wallet, children: [PAYMENTS, PLANS] };
+const BILLING: NavGroup   = { key: "billing", label: "Billing", icon: Wallet, children: [PAYMENTS, PLANS, RENEWALS] };
 
 const SECTIONS_DEF: { title: string; entries: NavEntry[] }[] = [
   { title: "People",   entries: [MEMBERS, LEADS, ATTENDANCE] },
@@ -78,7 +80,7 @@ const TABS_DEF: { item: NavItem; label: string }[] = [
 const flatten = (entries: NavEntry[]): NavItem[] =>
   entries.flatMap((e) => (isGroup(e) ? e.children : [e]));
 
-const ALL_ITEMS: NavItem[] = [OVERVIEW, ...SECTIONS_DEF.flatMap((s) => flatten(s.entries)), STAFF, SETTINGS];
+const ALL_ITEMS: NavItem[] = [OVERVIEW, ...SECTIONS_DEF.flatMap((s) => flatten(s.entries)), MEMBERSHIP, STAFF, SETTINGS];
 
 /**
  * The most specific nav item wins. Without this, /dashboard/diet/recipes lit up
@@ -457,6 +459,7 @@ function AppNav() {
 
   const showStaff = !role.loading && (role.staff_role === "owner" || role.staff_role === "manager");
   const showSettings = !role.loading && (role.staff_role === "owner" || role.permissions.settings);
+  const showMembership = !role.loading && (role.staff_role === "owner" || role.staff_role === "manager" || role.permissions.settings);
 
   const tabs = TABS_DEF.filter(({ item }) => allowed(item));
 
@@ -581,10 +584,11 @@ function AppNav() {
                 <ul className="db-sb-list">{section.entries.map(navEntry)}</ul>
               </div>
             ))}
-            {(showStaff || showSettings) && (
+            {(showMembership || showStaff || showSettings) && (
               <div className="db-sb-group">
                 <div className="db-sb-label"><span className="db-sb-fade">Admin</span></div>
                 <ul className="db-sb-list">
+                  {showMembership && navLink(MEMBERSHIP)}
                   {showStaff && navLink(STAFF)}
                   {showSettings && navLink(SETTINGS)}
                 </ul>
@@ -677,6 +681,7 @@ function AppNav() {
           ))}
           <div>
             <ul className="db-sb-group-list">
+              {showMembership && sheetRow(MEMBERSHIP)}
               {showStaff && sheetRow(STAFF)}
               {showSettings && sheetRow(SETTINGS)}
               <li>
