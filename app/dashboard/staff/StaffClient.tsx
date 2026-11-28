@@ -246,13 +246,6 @@ export default function StaffClient() {
         <div className="sf-actions">
           <button type="button" className="ps-btn ps-btn--primary" onClick={openAdd}><Plus size={16} strokeWidth={2.4} /><span>Add staff</span></button>
         </div>
-        <div className="sf-kpis">
-          <div className="sf-kpi"><span className="sf-kpi-icon"><Users size={15} /></span><div><small>Team size</small><b>{loading ? "–" : staff.length}</b></div></div>
-          <div className="sf-kpi"><span className="sf-kpi-icon"><UserCheck size={15} /></span><div><small>Active</small><b>{loading ? "–" : activeCount}</b></div></div>
-          <div className="sf-kpi"><span className="sf-kpi-icon"><KeyRound size={15} /></span><div><small>With a login</small><b>{loading ? "–" : withLogin}</b></div></div>
-          <div className="sf-kpi"><span className="sf-kpi-icon"><Mail size={15} /></span><div><small>Invite pending</small><b>{loading ? "–" : invitedCount}</b></div></div>
-          <div className="sf-kpi"><span className="sf-kpi-icon"><UserX size={15} /></span><div><small>Inactive</small><b>{loading ? "–" : inactiveCount}</b></div></div>
-        </div>
       </header>
 
       <div className="sf-toolbar">
@@ -497,12 +490,7 @@ const SF_CSS = `
 .sf-title h1 { margin: 0; font-size: 24px; font-weight: 750; letter-spacing: -0.025em; }
 .sf-title p { margin: 1px 0 0; font-size: 13px; color: var(--text-tertiary); }
 .sf-actions .ps-btn { height: 42px; border-radius: 12px; }
-.sf-kpis { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
-.sf-kpi { display: flex; align-items: center; gap: 9px; height: 50px; padding: 0 12px 0 9px; border-radius: 12px; background: #fff; border: 1px solid var(--sf-line); min-width: 0; }
-.sf-kpi-icon { width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center; background: var(--accent-dim, #e8f1ff); color: var(--accent); flex-shrink: 0; }
-.sf-kpi div { display: flex; flex-direction: column; line-height: 1.15; min-width: 0; }
-.sf-kpi small { font-size: 12px; font-weight: 600; color: var(--text-tertiary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sf-kpi b { font-size: 17px; font-weight: 750; }
+
 
 .sf-toolbar { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 10px; padding: 10px; margin-bottom: 14px; border-radius: 16px; background: #fff; border: 1px solid var(--sf-line); }
 .sf-toolbar::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: linear-gradient(90deg, #0a66d6, #3c4fe0); }
@@ -561,8 +549,7 @@ const SF_CSS = `
   .ps-page.sf { padding: 10px 10px 24px !important; }
   .sf-head { grid-template-columns: minmax(0, 1fr); }
   .sf-actions .ps-btn { width: 100%; justify-content: center; }
-  .sf-kpis { display: flex; overflow-x: auto; scrollbar-width: none; }
-  .sf-kpi { flex: 0 0 auto; }
+
   .sf-search { flex-basis: 100%; min-width: 0; }
   .sf-search input { font-size: 16px; }
   .sf-tr { grid-template-columns: minmax(0, 1fr) auto; padding: 10px 12px; min-height: 0; }

@@ -26,7 +26,7 @@ const ALLOWED: Record<string, { ext: string; maxMb: number }> = {
   "video/quicktime": { ext: "mov", maxMb: 100 },
 };
 
-const FOLDERS = new Set(["exercises"]); // extend later: "recipes", "logos", "members"
+const FOLDERS = new Set(["exercises", "support", "tickets", "logos", "members"]);
 
 export async function POST(req: NextRequest) {
   // 1. Who is asking?
@@ -62,9 +62,11 @@ export async function POST(req: NextRequest) {
     { expiresIn: 300 }, // 5 minutes
   );
 
+  const publicBase = (process.env.R2_PUBLIC_URL || "").replace(/\/$/, "");
+
   return NextResponse.json({
     uploadUrl,
-    publicUrl: `${process.env.R2_PUBLIC_URL}/${key}`,
+    publicUrl: `${publicBase}/${key}`,
     key,
   });
 }

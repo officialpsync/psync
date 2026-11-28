@@ -139,7 +139,7 @@ export function OnboardingReviewSheet({ member, onClose, onSynced }: Props) {
                 </span>
               </div>
               <p style={{ margin: "4px 0 0", fontSize: "0.825rem", color: "var(--text-tertiary)" }}>
-                {member.full_name} • Member Review & Master Profile Sync
+                {member.full_name} • Trainer: {sub.assigned_trainer || formData?.assigned_trainer || formData?.prefilledData?.assigned_trainer || "Psync Staff"} • Review & Profile Sync
               </p>
             </div>
             <button className="ps-icon-btn" onClick={onClose} aria-label="Close">
@@ -244,6 +244,40 @@ export function OnboardingReviewSheet({ member, onClose, onSynced }: Props) {
                 </div>
               </div>
 
+              {/* Custom Questions Breakdown */}
+              {sub.custom_answers && typeof sub.custom_answers === "object" && Object.keys(sub.custom_answers).length > 0 && (
+                <div style={{ background: "var(--surface-sunken)", padding: 14, borderRadius: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--primary)", fontWeight: 700 }}>
+                      Custom Questions & Member Responses
+                    </span>
+                    <span style={{ fontSize: "0.75rem", color: "var(--text-tertiary)" }}>
+                      {Object.keys(sub.custom_answers).length} answered
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {Object.entries(sub.custom_answers).map(([question, answer], idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          background: "var(--surface)",
+                          padding: "10px 12px",
+                          borderRadius: 8,
+                          border: "1px solid var(--border-subtle)",
+                        }}
+                      >
+                        <div style={{ fontSize: "0.785rem", fontWeight: 700, color: "var(--text-secondary)", marginBottom: 4 }}>
+                          {idx + 1}. {question}
+                        </div>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-primary)" }}>
+                          {String(answer) || "—"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Detailed Submitted Answers Breakdown */}
               <div style={{ background: "var(--surface-sunken)", padding: 14, borderRadius: 10, display: "flex", flexDirection: "column", gap: 10 }}>
                 <span style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--text-tertiary)", fontWeight: 700 }}>
@@ -278,6 +312,40 @@ export function OnboardingReviewSheet({ member, onClose, onSynced }: Props) {
                   </div>
                 </div>
               </div>
+
+              {/* Custom Questions Breakdown */}
+              {sub.custom_answers && typeof sub.custom_answers === "object" && Object.keys(sub.custom_answers).length > 0 && (
+                <div style={{ background: "var(--surface-sunken)", padding: 14, borderRadius: 10, display: "flex", flexDirection: "column", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={{ fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.05em", color: "var(--primary)", fontWeight: 700 }}>
+                      Custom Questions & Member Responses
+                    </span>
+                    <span style={{ fontSize: "0.75rem", color: "var(--text-tertiary)" }}>
+                      {Object.keys(sub.custom_answers).length} answered
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {Object.entries(sub.custom_answers).map(([question, answer], idx) => (
+                      <div
+                        key={idx}
+                        style={{
+                          background: "var(--surface)",
+                          padding: "10px 12px",
+                          borderRadius: 8,
+                          border: "1px solid var(--border-subtle)",
+                        }}
+                      >
+                        <div style={{ fontSize: "0.785rem", fontWeight: 700, color: "var(--text-secondary)", marginBottom: 4 }}>
+                          {idx + 1}. {question}
+                        </div>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 600, color: "var(--text-primary)" }}>
+                          {String(answer) || "—"}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* AWS S3 Medical Reports Section */}
               {Array.isArray(sub.medical_report_urls) && sub.medical_report_urls.length > 0 && (

@@ -269,29 +269,9 @@ export default function MembershipPage() {
       <DesignStyles />
       <style>{MS_CSS}</style>
 
-      {/* ── Breadcrumb & Top Header ── */}
-      <div className="ms-crumbs">
-        <Link href="/dashboard">Dashboard</Link>
-        <span>/</span>
-        <b>Membership & Subscription</b>
-      </div>
-
       <header className="ms-header">
         <div>
-          <div className="ms-badge-group">
-            <span className="ms-pill ms-pill--purple">
-              <Crown size={13} />
-              <span>Admin Center</span>
-            </span>
-            <span className="ms-pill ms-pill--green">
-              <span className="ms-live-dot" />
-              <span>Subscription Active</span>
-            </span>
-          </div>
           <h1 className="ms-title">Gym Membership & Subscription</h1>
-          <p className="ms-sub">
-            Review your gym's active Psync software license, track renewal status, and extend plans seamlessly.
-          </p>
         </div>
 
         <div className="ms-header-actions">
@@ -305,18 +285,6 @@ export default function MembershipPage() {
           </button>
         </div>
       </header>
-
-      {/* Quick link banner to member renewals */}
-      <div className="ms-renewal-banner">
-        <div className="ms-renewal-banner-text">
-          <RefreshCw size={15} className="ms-renewal-banner-icon" />
-          <span>Need to track gym member plan renewals and revenue?</span>
-        </div>
-        <Link href="/dashboard/renewals" className="ms-renewal-banner-link">
-          <span>Go to Member Renewals Tracker</span>
-          <ChevronRight size={14} />
-        </Link>
-      </div>
           {/* ── Main Hero Subscription Card ── */}
           <section className="ms-hero">
             <div className="ms-hero-bg" aria-hidden />
@@ -418,59 +386,11 @@ export default function MembershipPage() {
             </div>
           </section>
 
-          {/* ── Quota & Utilization Cards ── */}
-          <section className="ms-quotas">
-            <div className="ms-quota-card">
-              <div className="ms-qc-icon" style={{ background: "rgba(10, 102, 214, 0.12)", color: "#0a66d6" }}>
-                <Users size={18} />
-              </div>
-              <div className="ms-qc-body">
-                <small>Active Members</small>
-                <strong>{activeMembersCount} <span className="ms-qc-cap">/ Unlimited</span></strong>
-                <p>No caps on biometric or card members.</p>
-              </div>
-            </div>
-
-            <div className="ms-quota-card">
-              <div className="ms-qc-icon" style={{ background: "rgba(16, 185, 129, 0.12)", color: "#10b981" }}>
-                <ShieldCheck size={18} />
-              </div>
-              <div className="ms-qc-body">
-                <small>Staff & Trainer Seats</small>
-                <strong>{staffCount} <span className="ms-qc-cap">/ 10 Seats</span></strong>
-                <p>Owner, Manager, Trainer & Reception access.</p>
-              </div>
-            </div>
-
-            <div className="ms-quota-card">
-              <div className="ms-qc-icon" style={{ background: "rgba(139, 92, 246, 0.12)", color: "#8b5cf6" }}>
-                <Sparkles size={18} />
-              </div>
-              <div className="ms-qc-body">
-                <small>Psync AI Suite</small>
-                <strong>Unlimited <span className="ms-qc-cap">Included</span></strong>
-                <p>AI Workout routine and Diet generators.</p>
-              </div>
-            </div>
-
-            <div className="ms-quota-card">
-              <div className="ms-qc-icon" style={{ background: "rgba(245, 158, 11, 0.12)", color: "#f59e0b" }}>
-                <MessageSquare size={18} />
-              </div>
-              <div className="ms-qc-body">
-                <small>WhatsApp Pass Link</small>
-                <strong>Active <span className="ms-qc-cap">Included</span></strong>
-                <p>1-tap digital gym pass & renewal alerts.</p>
-              </div>
-            </div>
-          </section>
-
           {/* ── Renewal Packages Section ── */}
           <section className="ms-plans-section">
             <div className="ms-section-header">
               <div>
                 <h2>Renew or Upgrade Your Psync License</h2>
-                <p>Select a duration to extend your gym's subscription without service interruption.</p>
               </div>
             </div>
 

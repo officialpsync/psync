@@ -11,12 +11,15 @@
   --surface:      #ffffff;
   --surface-2:    #f2f2f4;
   --surface-3:    #e8e8ec;
+  --card-bg:      var(--surface);
+  --bg-secondary: var(--surface-2);
   --fill:         rgba(118, 118, 128, 0.08);
   --fill-2:       rgba(118, 118, 128, 0.14);
   --fill-3:       rgba(118, 118, 128, 0.20);
   --fill-strong:  var(--fill-2);
 
   --border:        rgba(0, 0, 0, 0.07);
+  --border-color:  var(--border);
   --border-mid:    rgba(0, 0, 0, 0.13);
   --border-strong: rgba(0, 0, 0, 0.22);
   --separator:     rgba(60, 60, 67, 0.12);
@@ -89,12 +92,15 @@ html.dark {
   --surface:      #15171e;
   --surface-2:    #1c1f28;
   --surface-3:    #252936;
+  --card-bg:      var(--surface);
+  --bg-secondary: var(--surface-2);
   --fill:         rgba(255, 255, 255, 0.06);
   --fill-2:       rgba(255, 255, 255, 0.10);
   --fill-3:       rgba(255, 255, 255, 0.16);
   --fill-strong:  var(--fill-2);
 
   --border:        rgba(255, 255, 255, 0.08);
+  --border-color:  var(--border);
   --border-mid:    rgba(255, 255, 255, 0.14);
   --border-strong: rgba(255, 255, 255, 0.22);
   --separator:     rgba(255, 255, 255, 0.08);

@@ -359,7 +359,7 @@ export default function AddMemberPage() {
                 type="date"
                 value={start_date}
                 onChange={(e) => setStartDate(e.target.value)}
-                style={{ colorScheme: "light", color: "var(--text-primary)" }}
+                style={{ color: "var(--text-primary)" }}
               />
               <span className="ps-hint">Can be today or a future date.</span>
             </label>

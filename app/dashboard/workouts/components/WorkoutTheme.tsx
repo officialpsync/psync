@@ -194,16 +194,12 @@ const WK_CSS = `
   font-weight: 700;
 }
 
-/* Header: title and buttons on one row, stat chips as an even row underneath */
+/* Header: title and buttons on one row */
 .wk-head { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px 14px; }
-.wk-kpis { grid-column: 1 / -1; grid-row: 2; display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; justify-content: stretch; overflow: visible; }
-.wk-kpi { min-width: 0; }
 .wk-actions { grid-column: 2; grid-row: 1; justify-content: flex-end; margin-left: 0; }
 @media (max-width: 760px) {
   .wk-head { grid-template-columns: minmax(0, 1fr); }
-  .wk-actions { grid-column: 1; grid-row: 3; width: 100%; }
-  .wk-kpis { display: flex; overflow-x: auto; scrollbar-width: none; }
-  .wk-kpi { flex: 0 0 auto; }
+  .wk-actions { grid-column: 1; grid-row: 2; width: 100%; }
 }
 
 html[data-theme="dark"] .wk, html.dark .wk {

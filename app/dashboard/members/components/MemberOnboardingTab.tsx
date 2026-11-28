@@ -250,6 +250,20 @@ export function MemberOnboardingTab({
               >
                 {status.replace(/_/g, " ")}
               </span>
+              {(sub.assigned_trainer || formData?.assigned_trainer || formData?.prefilledData?.assigned_trainer) && (
+                <span
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: "var(--text-tertiary)",
+                    background: "var(--surface-sunken)",
+                    padding: "2px 8px",
+                    borderRadius: 6,
+                  }}
+                >
+                  Trainer: {sub.assigned_trainer || formData?.assigned_trainer || formData?.prefilledData?.assigned_trainer}
+                </span>
+              )}
             </div>
             <p style={{ margin: "4px 0 0", fontSize: "0.85rem", color: "var(--text-secondary)" }}>
               {status === "submitted"
@@ -689,6 +703,38 @@ export function MemberOnboardingTab({
                     </div>
                     <ExternalLink size={15} color="var(--text-tertiary)" />
                   </a>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* ── Custom Questions & Responses ── */}
+          {sub.custom_answers && typeof sub.custom_answers === "object" && Object.keys(sub.custom_answers).length > 0 && (
+            <section className="mp-card">
+              <div className="mp-card-h">
+                <h2>Custom Questions & Member Responses</h2>
+                <span className="mp-pill" style={{ background: "rgba(10, 102, 214, 0.12)", color: "var(--accent)", fontWeight: 700, fontSize: 11 }}>
+                  {Object.keys(sub.custom_answers).length} Responses
+                </span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))", gap: 12 }}>
+                {Object.entries(sub.custom_answers).map(([question, answer], idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      padding: "12px 14px",
+                      borderRadius: 10,
+                      background: "var(--surface-sunken, #f8fafc)",
+                      border: "1px solid var(--mp-line)",
+                    }}
+                  >
+                    <small style={{ color: "var(--text-tertiary)", fontSize: 11, fontWeight: 700, textTransform: "uppercase", display: "block", marginBottom: 4 }}>
+                      {idx + 1}. {question}
+                    </small>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: "var(--text-primary)" }}>
+                      {String(answer) || "—"}
+                    </div>
+                  </div>
                 ))}
               </div>
             </section>

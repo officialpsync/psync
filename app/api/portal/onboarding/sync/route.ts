@@ -176,6 +176,19 @@ export async function POST(req: NextRequest) {
         : `[Trainer Review]: ${trainerNotes}`;
     }
 
+    if (d.custom_answers && typeof d.custom_answers === "object" && Object.keys(d.custom_answers).length > 0) {
+      const qSummary = Object.entries(d.custom_answers)
+        .filter(([_, ans]) => ans !== undefined && ans !== null && ans !== "")
+        .map(([q, a]) => `• ${q}: ${a}`)
+        .join("\n");
+      if (qSummary) {
+        const curNotes = memberUpdatePayload.notes || member.notes || "";
+        memberUpdatePayload.notes = curNotes
+          ? `${curNotes}\n\n[Custom Onboarding Answers]:\n${qSummary}`
+          : `[Custom Onboarding Answers]:\n${qSummary}`;
+      }
+    }
+
     // 3. Commit to members table
     const { error: updateErr } = await db
       .from("members")

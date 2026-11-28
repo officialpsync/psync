@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase";
+import { uploadToCloudflareR2 } from "@/lib/r2-client";
 import {
   Plus, Trash2, MapPin, Building2, Users, ShieldCheck, ShieldOff,
   MoreHorizontal, ImagePlus, X, Loader2, Settings as SettingsIcon, Palette, Store, Pencil, Phone, Check,
@@ -170,13 +171,8 @@ export default function SettingsPage() {
     const objectUrl = URL.createObjectURL(file);
     setLogoPreview(objectUrl);
     try {
-      const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
-      const path = `${org.id}/logo.${ext}`;
-      const { error: uploadError } = await supabase.storage
-        .from("org-assets").upload(path, file, { upsert: true, contentType: file.type });
-      if (uploadError) throw uploadError;
-      const { data: { publicUrl } } = supabase.storage.from("org-assets").getPublicUrl(path);
-      const urlWithBust = `${publicUrl}?t=${Date.now()}`;
+      const r2Url = await uploadToCloudflareR2(file, "logos");
+      const urlWithBust = `${r2Url}?t=${Date.now()}`;
 
       // Automatically extract brand colors from logo and generate new default theme
       const extractedBrand = await createBrandFromLogo(file, brand);
@@ -238,8 +234,6 @@ export default function SettingsPage() {
     if (!org?.logo_url) return;
     setUploadingLogo(true);
     try {
-      const match = org.logo_url.match(/org-assets\/(.+?)(\?|$)/);
-      if (match) await supabase.storage.from("org-assets").remove([match[1]]);
       const { ok: savedOk, error: serverErr } = await saveOrgToServer({ logo_url: null });
       if (!savedOk) throw new Error(serverErr || "Failed to remove logo");
 

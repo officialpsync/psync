@@ -994,10 +994,24 @@ export const SIDEBAR_CSS = `
 .db-sb[data-open="false"] .db-sb-fade{opacity:0;pointer-events:none;transition-delay:0ms}
 
 /* ── Header ──────────────────────────────────────────────────────────── */
-.db-sb-head{display:flex;flex-direction:column;min-width:0;padding:6px 12px 14px}
-.db-sb-head-top{display:flex;justify-content:flex-end;align-items:center;min-height:28px}
+.db-sb-head{
+  display:flex;flex-direction:column;min-width:0;
+  padding:6px 12px 14px;
+  width:var(--sb-full);
+  box-sizing:border-box;
+  transition:width 220ms var(--sb-ease),padding 220ms var(--sb-ease);
+}
+.db-sb-head-top{
+  display:flex;justify-content:flex-end;align-items:center;
+  min-height:28px;
+  transition:min-height 220ms var(--sb-ease),opacity 180ms ease;
+}
 .db-sb-pin-btn{color:var(--accent,#10b981)}
-.db-sb-logo-wrap{display:flex;justify-content:center;align-items:center;width:100%;min-width:0;transition:all 220ms var(--sb-ease)}
+.db-sb-logo-wrap{
+  display:flex;flex-direction:column;justify-content:center;align-items:center;
+  width:100%;min-width:0;text-align:center;
+  transition:all 220ms var(--sb-ease);
+}
 .db-sb-brand{
   display:inline-flex;align-items:center;justify-content:center;
   color:inherit;text-decoration:none;
@@ -1012,6 +1026,7 @@ export const SIDEBAR_CSS = `
   background:var(--sidebar-chip-bg,var(--accent));color:var(--sidebar-chip-fg,var(--accent-fg,#fff));
   box-shadow:0 3px 12px rgba(0,0,0,0.08);
 }
+.db-sb-mark-text{font-size:16px;line-height:1}
 .db-sb-mark img{display:block;width:100%;height:100%;object-fit:cover}
 .db-sb-mark--empty{
   background:var(--surface-2, rgba(0,0,0,0.03));
@@ -1023,10 +1038,17 @@ export const SIDEBAR_CSS = `
   background:var(--surface,#ffffff);color:var(--text-primary,#1d1d1f);
   box-shadow:0 1px 4px rgba(0,0,0,0.25),0 0 0 1.5px var(--sidebar-bg,#ffffff);
   display:flex;align-items:center;justify-content:center;
-  transition:transform 140ms ease,background 140ms ease,color 140ms ease;
+  opacity:0 !important;pointer-events:none !important;transform:scale(0.85);
+  transition:opacity 160ms ease,transform 160ms ease,background 140ms ease,color 140ms ease;
   z-index:2;
 }
-.db-sb-brand:hover .db-sb-mark-badge{transform:scale(1.18);background:var(--accent);color:#ffffff}
+.db-sb-brand:hover .db-sb-mark-badge,
+.db-sb-brand:focus-within .db-sb-mark-badge,
+.db-sb-mark-wrap:hover .db-sb-mark-badge,
+.db-sb-mark-wrap:focus-within .db-sb-mark-badge{
+  opacity:1 !important;pointer-events:auto !important;transform:scale(1.1);
+  background:var(--accent);color:#ffffff;
+}
 
 /* Large logo positioning in sidebar */
 .db-sb-mark-wrap--lg{margin:2px auto 6px auto;transition:margin 220ms var(--sb-ease)}
@@ -1036,14 +1058,85 @@ export const SIDEBAR_CSS = `
   box-shadow:0 6px 20px rgba(0,0,0,0.12);
   transition:width 220ms var(--sb-ease),height 220ms var(--sb-ease);
 }
+.db-sb-mark--lg .db-sb-mark-text{font-size:26px}
 .db-sb-mark-wrap--lg .db-sb-mark-badge{right:3px;bottom:3px;width:24px;height:24px}
 
-/* In rail mode (data-open="false"): logo smoothly scales down and aligns to rail center x=36 */
-.db-sb[data-open="false"] .db-sb-head{padding:8px 0 10px 0}
-.db-sb[data-open="false"] .db-sb-logo-wrap{justify-content:flex-start}
-.db-sb[data-open="false"] .db-sb-mark-wrap--lg{margin-left:15px;margin-right:0;margin-top:2px;margin-bottom:0}
-.db-sb[data-open="false"] .db-sb-mark--lg{width:42px;height:42px;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
-.db-sb[data-open="false"] .db-sb-mark-wrap--lg .db-sb-mark-badge{width:16px;height:16px;right:-2px;bottom:-2px}
+/* In rail mode (data-state="rail" or data-open="false"): logo smoothly scales down and stays centered at rail x=36 */
+.db-sb[data-state="rail"] .db-sb-head-top,
+.db-sb[data-open="false"] .db-sb-head-top,
+.db-sb:not([data-open="true"]) .db-sb-head-top{display:none !important;height:0 !important;min-height:0 !important;padding:0 !important;margin:0 !important;opacity:0 !important}
+
+.db-sb[data-state="rail"] .db-sb-head,
+.db-sb[data-open="false"] .db-sb-head,
+.db-sb:not([data-open="true"]) .db-sb-head{
+  padding:12px 0 6px 0 !important;
+  width:var(--sb-rail) !important;
+  max-width:var(--sb-rail) !important;
+  align-items:center !important;
+  justify-content:center !important;
+  flex-shrink:0 !important;
+}
+
+.db-sb[data-state="rail"] .db-sb-logo-wrap,
+.db-sb[data-open="false"] .db-sb-logo-wrap,
+.db-sb:not([data-open="true"]) .db-sb-logo-wrap{
+  width:var(--sb-rail) !important;
+  max-width:var(--sb-rail) !important;
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:center !important;
+  justify-content:center !important;
+  margin:0 auto !important;
+}
+
+.db-sb[data-state="rail"] .db-sb-brand,
+.db-sb[data-open="false"] .db-sb-brand,
+.db-sb:not([data-open="true"]) .db-sb-brand{
+  width:var(--sb-rail) !important;
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  margin:0 auto !important;
+}
+
+.db-sb[data-state="rail"] .db-sb-mark-wrap,
+.db-sb[data-open="false"] .db-sb-mark-wrap,
+.db-sb:not([data-open="true"]) .db-sb-mark-wrap,
+.db-sb[data-state="rail"] .db-sb-mark-wrap--lg,
+.db-sb[data-open="false"] .db-sb-mark-wrap--lg,
+.db-sb:not([data-open="true"]) .db-sb-mark-wrap--lg{
+  margin:0 auto !important;
+  display:inline-flex !important;
+}
+
+.db-sb[data-state="rail"] .db-sb-mark,
+.db-sb[data-open="false"] .db-sb-mark,
+.db-sb:not([data-open="true"]) .db-sb-mark,
+.db-sb[data-state="rail"] .db-sb-mark--lg,
+.db-sb[data-open="false"] .db-sb-mark--lg,
+.db-sb:not([data-open="true"]) .db-sb-mark--lg{
+  width:44px !important;
+  height:44px !important;
+  margin:0 auto !important;
+  box-shadow:0 2px 8px rgba(0,0,0,0.08) !important;
+}
+
+.db-sb[data-state="rail"] .db-sb-mark--lg .db-sb-mark-text,
+.db-sb[data-open="false"] .db-sb-mark--lg .db-sb-mark-text,
+.db-sb:not([data-open="true"]) .db-sb-mark--lg .db-sb-mark-text{font-size:18px !important}
+
+.db-sb[data-state="rail"] .db-sb-mark-wrap--lg .db-sb-mark-badge,
+.db-sb[data-open="false"] .db-sb-mark-wrap--lg .db-sb-mark-badge,
+.db-sb:not([data-open="true"]) .db-sb-mark-wrap--lg .db-sb-mark-badge{
+  width:18px !important;
+  height:18px !important;
+  right:-1px !important;
+  bottom:-1px !important;
+}
+
+.db-sb[data-state="rail"] .db-sb-logo-wrap .db-sb-fade,
+.db-sb[data-open="false"] .db-sb-logo-wrap .db-sb-fade,
+.db-sb:not([data-open="true"]) .db-sb-logo-wrap .db-sb-fade{display:none !important;height:0 !important;margin:0 !important;padding:0 !important}
 
 /* ── Nav ─────────────────────────────────────────────────────────────── */
 .db-sb-nav{
@@ -1052,6 +1145,23 @@ export const SIDEBAR_CSS = `
 }
 .db-sb-group{display:flex;flex-direction:column;gap:2px}
 .db-sb-label{position:relative;display:flex;align-items:center;height:24px;padding:0 13px;font-size:11.5px;font-weight:600;letter-spacing:.01em;color:var(--sidebar-faint)}
+.db-sb-label-btn{
+  width:100%;justify-content:space-between;border:0;background:transparent;
+  font:inherit;text-align:left;cursor:pointer;border-radius:var(--radius-sm,8px);
+  user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+  transition:color 140ms ease,background 140ms ease;
+}
+.db-sb-label-btn:hover{color:var(--sidebar-muted);background:var(--sidebar-hover-bg)}
+.db-sb-label-caret{transition:transform 200ms var(--sb-ease);color:var(--sidebar-faint);flex:none}
+.db-sb-label-btn[aria-expanded="false"] .db-sb-label-caret{transform:rotate(-90deg)}
+
+.db-sb-section-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows 200ms var(--sb-ease)}
+.db-sb-section-body[data-open="true"]{grid-template-rows:1fr}
+.db-sb-section-inner{
+  overflow:hidden;min-height:0;visibility:hidden;transition:visibility 0s linear 200ms;
+}
+.db-sb-section-body[data-open="true"] .db-sb-section-inner{visibility:visible;transition-delay:0s}
+
 /* In the rail the section title becomes a short rule, so groups stay distinct. */
 .db-sb-label::after{content:"";position:absolute;left:10px;width:24px;top:50%;height:1px;background:var(--sidebar-border,rgba(60,60,67,.12));opacity:0;transition:opacity 140ms ease}
 .db-sb[data-open="false"] .db-sb-label::after{opacity:1}
@@ -1178,7 +1288,7 @@ export const SIDEBAR_CSS = `
 /* Reduced motion: no sliding or rotating. Opacity fades stay, they aid comprehension. */
 @media (prefers-reduced-motion:reduce){
   .ps-sidebar.db-sb,.ps-sidebar.db-sb[data-open="true"]{transition:none}
-  .db-sb-sub,.db-sb-caret,.db-sb-sublist{transition:none}
+  .db-sb-sub,.db-sb-caret,.db-sb-sublist,.db-sb-section-body,.db-sb-label-caret{transition:none}
   .db-sb-brand:active,.db-sb-item:active,.db-sb-iconbtn:active,.db-sb-tab:active{transform:none}
 }
 

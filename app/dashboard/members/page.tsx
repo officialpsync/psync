@@ -9,8 +9,8 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Plus, Search, X, SlidersHorizontal, ChevronRight, ChevronLeft, ChevronDown, Check,
-  Download, Bookmark, Trash2, ArrowUpDown, Users, Loader2, FileSpreadsheet, FileText, RefreshCw,
-  Upload, Pin, ArrowLeftRight, Archive, ArchiveRestore,
+  Download, Trash2, ArrowUpDown, Users, Loader2, FileSpreadsheet, FileText, RefreshCw,
+  Upload, Pin, Archive, ArchiveRestore,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -18,7 +18,7 @@ import autoTable from "jspdf-autotable";
 import { createClient } from "@/lib/supabase";
 import { Avatar, Skeleton, useToast, formatDate, formatINR } from "../components/ui";
 import { RenewalSheet } from "./components/RenewalSheet";
-import { ImportMembersSheet } from "./components/ImportMembersSheet";
+import { CreateMemberModal } from "./components/CreateMemberModal";
 import { loadPref, savePref } from "../leads/lib";
 
 const supabase = createClient();
@@ -402,10 +402,11 @@ function FilterPanel({ f, set, plans, count, onClear, onClose, onExport }: {
 }) {
   const [filterTab, setFilterTab] = useState<"general" | "tags">("general");
   const [tagSearch, setTagSearch] = useState("");
+  const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const toggle = (arr: string[], v: string) => (arr.includes(v) ? arr.filter((x) => x !== v) : [...arr, v]);
 
   return (
-    <div className={`mb-pop ${filterTab === "tags" ? "mb-pop--wide" : ""}`} onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Filters">
+    <div className={`mb-pop mb-pop--right ${filterTab === "tags" ? "mb-pop--wide" : ""}`} onClick={(e) => { e.stopPropagation(); setExportMenuOpen(false); }} role="dialog" aria-label="Filters">
       <div className="mb-pop-head">
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <strong>Filters</strong>
@@ -431,53 +432,6 @@ function FilterPanel({ f, set, plans, count, onClear, onClose, onExport }: {
 
       {filterTab === "general" ? (
         <div className="mb-pop-body">
-          <section className="mb-filter-export-banner">
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600 }}>Export filtered list</div>
-              <div style={{ fontSize: 12, color: "var(--text-tertiary)" }}>
-                {count} member{count === 1 ? "" : "s"} match current filters
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-              <button
-                type="button"
-                className="ps-btn ps-btn--secondary ps-btn--sm"
-                onClick={() => {
-                  onExport("csv");
-                  onClose();
-                }}
-                disabled={count === 0}
-                title="Export as CSV"
-              >
-                CSV
-              </button>
-              <button
-                type="button"
-                className="ps-btn ps-btn--secondary ps-btn--sm"
-                onClick={() => {
-                  onExport("xlsx");
-                  onClose();
-                }}
-                disabled={count === 0}
-                title="Export as Excel (.xlsx)"
-              >
-                Excel
-              </button>
-              <button
-                type="button"
-                className="ps-btn ps-btn--secondary ps-btn--sm"
-                onClick={() => {
-                  onExport("pdf");
-                  onClose();
-                }}
-                disabled={count === 0}
-                title="Export as PDF"
-              >
-                PDF
-              </button>
-            </div>
-          </section>
-
           <section>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 7 }}>
               <h4>Health & Medical Tags</h4>
@@ -640,18 +594,83 @@ function FilterPanel({ f, set, plans, count, onClear, onClose, onExport }: {
       <div className="mb-pop-foot">
         <button type="button" className="ps-btn ps-btn--secondary ps-btn--sm" onClick={onClear}>Reset</button>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button
-            type="button"
-            className="ps-btn ps-btn--secondary ps-btn--sm"
-            onClick={() => {
-              onExport("csv");
-              onClose();
-            }}
-            disabled={count === 0}
-            title="Export filtered members as CSV"
-          >
-            <Download size={14} /> Export ({count})
-          </button>
+          <div className="mb-anchor" style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button"
+              className="ps-btn ps-btn--secondary ps-btn--sm mb-export-btn"
+              onClick={() => setExportMenuOpen((v) => !v)}
+              disabled={count === 0}
+              aria-haspopup="true"
+              aria-expanded={exportMenuOpen}
+              title="Export filtered members (CSV, Excel, PDF)"
+            >
+              <Download size={14} />
+              <span>Export ({count})</span>
+              <ChevronDown size={12} className={`mb-export-caret ${exportMenuOpen ? "mb-export-caret--up" : ""}`} />
+            </button>
+
+            {exportMenuOpen && (
+              <div
+                className="mb-menu mb-menu--right"
+                style={{
+                  position: "absolute",
+                  bottom: "calc(100% + 6px)",
+                  right: 0,
+                  top: "auto",
+                  minWidth: 210,
+                  zIndex: 100,
+                  padding: 4,
+                  boxShadow: "0 12px 30px rgba(0,0,0,0.18)",
+                }}
+              >
+                <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: "var(--text-tertiary)", padding: "4px 8px 6px" }}>
+                  Export format
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    onExport("csv");
+                    onClose();
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <FileText size={15} style={{ color: "var(--accent)" }} />
+                    <span>CSV (.csv)</span>
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Sheet</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    onExport("xlsx");
+                    onClose();
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <FileSpreadsheet size={15} style={{ color: "#10b981" }} />
+                    <span>Excel (.xlsx)</span>
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Workbook</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExportMenuOpen(false);
+                    onExport("pdf");
+                    onClose();
+                  }}
+                >
+                  <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <Download size={15} style={{ color: "#ef4444" }} />
+                    <span>PDF document</span>
+                  </span>
+                  <span style={{ fontSize: 11, color: "var(--text-tertiary)" }}>Table</span>
+                </button>
+              </div>
+            )}
+          </div>
           <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" onClick={onClose}>
             Show {count} member{count === 1 ? "" : "s"}
           </button>
@@ -682,17 +701,18 @@ export default function MembersPage() {
   const [filters, setFilters] = useState<Filters>(NO_FILTERS);
   const [sort, setSort] = useState<SortKey>("newest");
   const [panel, setPanel] = useState<"filters" | "sort" | "views" | null>(null);
-  const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
-  const [bulkSubView, setBulkSubView] = useState<"main" | "export">("main");
   const [exportIncludeTags, setExportIncludeTags] = useState(true);
   const [exportFormat, setExportFormat] = useState<ExportFormat>("csv");
   const [views, setViews] = useState<View[]>([]);
   const [viewId, setViewId] = useState<string | null>(null);
+
+  // Only show up to 3 saved pins created by the user, nothing by default
+  const savedPinsToDisplay = useMemo(() => views.slice(0, 3), [views]);
   const [naming, setNaming] = useState(false);
   const [viewName, setViewName] = useState("");
   const [page, setPage] = useState(0);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [renewMember, setRenewMember] = useState<Member | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
   const [statusMenuId, setStatusMenuId] = useState<string | null>(null);
   const [changingStatusId, setChangingStatusId] = useState<string | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -818,7 +838,7 @@ export default function MembersPage() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "/" && !(e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement)) { e.preventDefault(); searchRef.current?.focus(); }
-      if (e.key === "Escape") { setPanel(null); setBulkMenuOpen(false); setSearchFocused(false); }
+      if (e.key === "Escape") { setPanel(null); setSearchFocused(false); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -928,24 +948,8 @@ export default function MembersPage() {
   function saveView() {
     const name = viewName.trim(); if (!name) return;
     const v: View = { id: crypto.randomUUID(), name, tab, filters, pinned: false };
-    persistViews([...views, v]); setViewId(v.id); setNaming(false); setViewName(""); show("Filter saved");
+    persistViews([...views, v]); setViewId(v.id); setNaming(false); setViewName(""); show("Pin saved");
   }
-  const MAX_PINNED_FILTERS = 3;
-
-  function togglePinView(id: string) {
-    const target = views.find((v) => v.id === id);
-    if (!target) return;
-    if (!target.pinned) {
-      const currentPinned = views.filter((v) => v.pinned).length;
-      if (currentPinned >= MAX_PINNED_FILTERS) {
-        show(`You can only pin up to ${MAX_PINNED_FILTERS} filters`, "error");
-        return;
-      }
-    }
-    const next = views.map((v) => (v.id === id ? { ...v, pinned: !v.pinned } : v));
-    persistViews(next);
-  }
-  const pinnedViews = useMemo(() => views.filter((v) => v.pinned).slice(0, MAX_PINNED_FILTERS), [views]);
 
   function getExportDataset(target: "filtered" | "all" = "filtered", includeTags: boolean = true) {
     const dataRows = target === "all" ? members : rows;
@@ -1102,7 +1106,7 @@ export default function MembersPage() {
   const dirty = tab !== "all" || chips.length > 0;
 
   return (
-    <div className="ps-page mb" onClick={() => { setPanel(null); setBulkMenuOpen(false); }}>
+    <div className="ps-page mb" onClick={() => { setPanel(null); }}>
       <style>{CSS}</style>
 
       <header className="mb-head">
@@ -1113,189 +1117,180 @@ export default function MembersPage() {
           </div>
         </div>
         <div className="mb-head-actions">
-          <div className="mb-anchor" onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button"
-              className="ps-btn ps-btn--secondary ps-btn--sm mb-bulk-btn"
-              onClick={() => {
-                setBulkMenuOpen((v) => {
-                  const next = !v;
-                  if (next) setBulkSubView("main");
-                  return next;
-                });
-              }}
-              aria-haspopup="true"
-              aria-expanded={bulkMenuOpen}
-              title="Bulk transfer (Import or Export members)"
-            >
-              <ArrowLeftRight size={14} />
-              <span>Bulk transfer</span>
-              <ChevronDown size={13} className={`mb-export-caret ${bulkMenuOpen ? "mb-export-caret--up" : ""}`} />
-            </button>
-
-            {bulkMenuOpen && (
-              <div className="mb-menu mb-menu--right mb-bulk-menu" role="menu">
-                {bulkSubView === "main" ? (
-                  <>
-                    <div className="mb-bulk-menu-head">
-                      <strong>Bulk transfer</strong>
-                    </div>
-
-                    <button
-                      type="button"
-                      className="mb-bulk-item"
-                      onClick={() => {
-                        setBulkMenuOpen(false);
-                        setImportOpen(true);
-                      }}
-                    >
-                      <div className="mb-bulk-item-icon mb-bulk-item-icon--import">
-                        <Upload size={15} />
-                      </div>
-                      <div className="mb-bulk-item-text">
-                        <strong>Import</strong>
-                        <small>Upload CSV, Excel, or JSON</small>
-                      </div>
-                    </button>
-
-                    <button
-                      type="button"
-                      className="mb-bulk-item"
-                      onClick={() => setBulkSubView("export")}
-                    >
-                      <div className="mb-bulk-item-icon mb-bulk-item-icon--export">
-                        <Download size={15} />
-                      </div>
-                      <div className="mb-bulk-item-text">
-                        <strong>Export</strong>
-                        <small>Download directory (CSV, Excel, PDF)</small>
-                      </div>
-                      <ChevronRight size={14} className="mb-bulk-arrow" />
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <div className="mb-export-menu-head">
-                      <button
-                        type="button"
-                        className="mb-bulk-back-btn"
-                        onClick={() => setBulkSubView("main")}
-                        title="Back to options"
-                      >
-                        <ChevronLeft size={13} />
-                        <span>Back</span>
-                      </button>
-                      <span className="mb-export-format-badge">{exportFormat.toUpperCase()}</span>
-                    </div>
-
-                    <div className="mb-export-format-box">
-                      <div className="mb-export-format-label">Format</div>
-                      <div className="mb-export-format-pills">
-                        <button
-                          type="button"
-                          className={`mb-export-format-pill ${exportFormat === "csv" ? "active" : ""}`}
-                          onClick={() => setExportFormat("csv")}
-                        >
-                          <FileText size={12} />
-                          <span>CSV</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`mb-export-format-pill ${exportFormat === "xlsx" ? "active" : ""}`}
-                          onClick={() => setExportFormat("xlsx")}
-                        >
-                          <FileSpreadsheet size={12} />
-                          <span>Excel (.xlsx)</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`mb-export-format-pill ${exportFormat === "pdf" ? "active" : ""}`}
-                          onClick={() => setExportFormat("pdf")}
-                        >
-                          <Download size={12} />
-                          <span>PDF</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <label className="mb-export-check">
-                      <input
-                        type="checkbox"
-                        checked={exportIncludeTags}
-                        onChange={(e) => setExportIncludeTags(e.target.checked)}
-                      />
-                      <span>Include tags & health data</span>
-                    </label>
-
-                    <div className="mb-menu-sep" />
-
-                    <button
-                      type="button"
-                      className="mb-export-opt"
-                      disabled={rows.length === 0}
-                      onClick={() => {
-                        setBulkMenuOpen(false);
-                        setBulkSubView("main");
-                        exportData(exportFormat, "filtered", exportIncludeTags);
-                      }}
-                    >
-                      <div className="mb-export-opt-text">
-                        <strong>Filtered list ({rows.length})</strong>
-                        <small>Matching current search & filters as {exportFormat.toUpperCase()}</small>
-                      </div>
-                      <Download size={14} className="mb-export-opt-icon" />
-                    </button>
-
-                    <button
-                      type="button"
-                      className="mb-export-opt"
-                      disabled={members.length === 0}
-                      onClick={() => {
-                        setBulkMenuOpen(false);
-                        setBulkSubView("main");
-                        exportData(exportFormat, "all", exportIncludeTags);
-                      }}
-                    >
-                      <div className="mb-export-opt-text">
-                        <strong>All members ({members.length})</strong>
-                        <small>Entire gym directory as {exportFormat.toUpperCase()}</small>
-                      </div>
-                      <Download size={14} className="mb-export-opt-icon" />
-                    </button>
-                  </>
-                )}
-              </div>
-            )}
-          </div>
-          <Link href="/dashboard/members/new" className="ps-btn ps-btn--primary ps-btn--sm"><Plus size={16} strokeWidth={2.4} /> Add member</Link>
+          <button type="button" onClick={() => setIsAddModalOpen(true)} className="ps-btn ps-btn--primary ps-btn--sm">
+            <Plus size={16} strokeWidth={2.4} /> Add member
+          </button>
         </div>
       </header>
 
       <div className="mb-card">
-        {/* Status tabs */}
-        <nav className="mb-tabs" role="tablist">
-          {TABS.map((t) => {
-            const isSelected = tab === t.key;
-            return (
-              <button
-                key={t.key}
-                type="button"
-                role="tab"
-                data-tone={t.key}
-                aria-selected={isSelected}
-                onClick={() => { setTab(t.key); setViewId(null); }}
-              >
-                <span className={`mb-tab-radio ${isSelected ? "mb-tab-radio--checked" : ""}`} aria-hidden>
-                  {isSelected && <span className="mb-tab-radio-dot" />}
-                </span>
-                <span>{t.label}</span>
-                <span className="mb-count">{loading ? "–" : counts[t.key]}</span>
-              </button>
-            );
-          })}
-        </nav>
+        {/* Status tabs & parallel tools bar */}
+        <div className="mb-tabs-bar">
+          <nav className="mb-tabs" role="tablist">
+            {TABS.map((t) => {
+              const isSelected = tab === t.key;
+              return (
+                <button
+                  key={t.key}
+                  type="button"
+                  role="tab"
+                  data-tone={t.key}
+                  aria-selected={isSelected}
+                  onClick={() => { setTab(t.key); setViewId(null); }}
+                >
+                  <span className={`mb-tab-radio ${isSelected ? "mb-tab-radio--checked" : ""}`} aria-hidden>
+                    {isSelected && <span className="mb-tab-radio-dot" />}
+                  </span>
+                  <span>{t.label}</span>
+                  <span className="mb-count">{loading ? "–" : counts[t.key]}</span>
+                </button>
+              );
+            })}
+          </nav>
 
-        {/* Toolbar */}
+          <div className="mb-tabs-tools">
+            <div className="mb-anchor" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                className="mb-tool"
+                data-on={panel === "filters" || chips.some((c) => !c.key.startsWith("tag-"))}
+                onClick={() => setPanel((p) => (p === "filters" ? null : "filters"))}
+              >
+                <SlidersHorizontal size={15} /> Filters{chips.length > 0 && <span className="mb-badge">{chips.length}</span>}
+              </button>
+              {panel === "filters" && (
+                <FilterPanel
+                  f={filters}
+                  set={setF}
+                  plans={plans}
+                  count={rows.length}
+                  onClear={() => { setFilters(NO_FILTERS); setViewId(null); }}
+                  onClose={() => setPanel(null)}
+                  onExport={(fmt) => exportData(fmt, "filtered", exportIncludeTags)}
+                />
+              )}
+            </div>
+
+            <div className="mb-anchor" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                className="mb-tool"
+                onClick={() => setPanel((p) => (p === "sort" ? null : "sort"))}
+              >
+                <ArrowUpDown size={15} /> {SORT_LABEL[sort]}
+              </button>
+              {panel === "sort" && (
+                <div className="mb-menu mb-menu--right">
+                  {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      data-on={sort === k}
+                      onClick={() => { setSort(k); setPanel(null); }}
+                    >
+                      {SORT_LABEL[k]}{sort === k && <Check size={14} />}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mb-anchor" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                className="mb-tool"
+                data-on={!!viewId}
+                onClick={() => setPanel((p) => (p === "views" ? null : "views"))}
+              >
+                <Pin size={15} />
+                <span>{views.find((v) => v.id === viewId)?.name ?? "Saved pins"}</span>
+                <span className="mb-badge">{views.length}</span>
+              </button>
+              {panel === "views" && (
+                <div className="mb-menu mb-menu--right" style={{ width: 270 }}>
+                  {views.length === 0 && !naming && (
+                    <div className="mb-muted" style={{ padding: "8px 10px", fontSize: 12.5 }}>
+                      Save a tab and filter combo you pin often, like “Expiring, no diet plan”.
+                    </div>
+                  )}
+                  {views.length > 0 && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px 4px", fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      <span>Saved pins ({views.length})</span>
+                    </div>
+                  )}
+                  {views.map((v) => {
+                    const isCurrent = viewId === v.id;
+                    return (
+                      <div key={v.id} className="mb-view" data-on={isCurrent}>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isCurrent) {
+                              setViewId(null);
+                              setPanel(null);
+                            } else {
+                              setTab(v.tab);
+                              setFilters(v.filters);
+                              setViewId(v.id);
+                              setPanel(null);
+                            }
+                          }}
+                        >
+                          <Pin size={12} style={{ color: isCurrent ? "var(--accent)" : "var(--text-tertiary)", flexShrink: 0 }} />
+                          <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.name}</span>
+                          {isCurrent && <Check size={13} style={{ color: "var(--accent)", marginLeft: "auto" }} />}
+                        </button>
+                        <button
+                          type="button"
+                          className="mb-icon"
+                          aria-label={`Delete ${v.name}`}
+                          title={`Delete pin "${v.name}"`}
+                          onClick={() => {
+                            persistViews(views.filter((x) => x.id !== v.id));
+                            if (viewId === v.id) setViewId(null);
+                          }}
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                  <div className="mb-menu-sep" />
+                  {naming ? (
+                    <div style={{ display: "flex", gap: 6, padding: 4 }}>
+                      <input
+                        className="mb-input"
+                        autoFocus
+                        placeholder="Pin name"
+                        value={viewName}
+                        maxLength={40}
+                        onChange={(e) => setViewName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") saveView();
+                          if (e.key === "Escape") setNaming(false);
+                        }}
+                      />
+                      <button
+                        type="button"
+                        className="ps-btn ps-btn--primary ps-btn--sm"
+                        disabled={!viewName.trim()}
+                        onClick={saveView}
+                      >
+                        Save
+                      </button>
+                    </div>
+                  ) : (
+                    <button type="button" disabled={!dirty} onClick={() => setNaming(true)}>
+                      <Plus size={14} /> Save current pin
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Toolbar (Search) */}
         <div className="mb-toolbar">
           <div className="mb-search-container" ref={searchContainerRef}>
             <label className="mb-search">
@@ -1407,106 +1402,39 @@ export default function MembersPage() {
             )}
           </div>
 
-          <div className="mb-anchor" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="mb-tool" data-on={panel === "filters" || chips.some((c) => !c.key.startsWith("tag-"))} onClick={() => setPanel((p) => (p === "filters" ? null : "filters"))}>
-              <SlidersHorizontal size={15} /> Filters{chips.length > 0 && <span className="mb-badge">{chips.length}</span>}
-            </button>
-            {panel === "filters" && (
-              <FilterPanel f={filters} set={setF} plans={plans} count={rows.length}
-                onClear={() => { setFilters(NO_FILTERS); setViewId(null); }} onClose={() => setPanel(null)}
-                onExport={(fmt) => exportData(fmt, "filtered", exportIncludeTags)} />
-            )}
-          </div>
-
-          <div className="mb-anchor" onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="mb-tool" onClick={() => setPanel((p) => (p === "sort" ? null : "sort"))}><ArrowUpDown size={15} /> {SORT_LABEL[sort]}</button>
-            {panel === "sort" && (
-              <div className="mb-menu">
-                {(Object.keys(SORT_LABEL) as SortKey[]).map((k) => (
-                  <button key={k} type="button" data-on={sort === k} onClick={() => { setSort(k); setPanel(null); }}>{SORT_LABEL[k]}{sort === k && <Check size={14} />}</button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Pinned filter pills */}
-          {pinnedViews.length > 0 && (
-            <div className="mb-pinned-pills">
-              {pinnedViews.map((pv) => {
-                const isSelected = viewId === pv.id;
-                return (
-                  <button
-                    key={pv.id}
-                    type="button"
-                    className="mb-pinned-pill"
-                    data-on={isSelected}
-                    onClick={() => {
-                      if (isSelected) {
-                        setViewId(null);
-                      } else {
-                        setTab(pv.tab);
-                        setFilters(pv.filters);
-                        setViewId(pv.id);
-                      }
-                    }}
-                    title={`Apply "${pv.name}" filter`}
-                  >
-                    <Pin size={11} className="mb-pinned-pin" />
-                    <span>{pv.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="mb-anchor" style={{ marginLeft: "auto" }} onClick={(e) => e.stopPropagation()}>
-            <button type="button" className="mb-tool" data-on={!!viewId} onClick={() => setPanel((p) => (p === "views" ? null : "views"))}>
-              <Bookmark size={15} /> {views.find((v) => v.id === viewId)?.name ?? "Saved filters"}
-            </button>
-            {panel === "views" && (
-              <div className="mb-menu mb-menu--right" style={{ width: 270 }}>
-                {views.length === 0 && !naming && <div className="mb-muted" style={{ padding: "8px 10px", fontSize: 12.5 }}>Save a tab and filter combo you use often, like “Expiring, no diet plan”.</div>}
-                {views.length > 0 && (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px 4px", fontSize: 11, fontWeight: 600, color: "var(--text-tertiary)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                    <span>Filters ({views.length})</span>
-                    <span>{pinnedViews.length}/{MAX_PINNED_FILTERS} Pinned</span>
-                  </div>
-                )}
-                {views.map((v) => {
-                  const atLimit = !v.pinned && pinnedViews.length >= MAX_PINNED_FILTERS;
+          {/* Saved pins right to left in pills in below lane (only if created by user) */}
+          {savedPinsToDisplay.length > 0 && (
+            <div className="mb-pinned-lane">
+              <div className="mb-pinned-pills">
+                {savedPinsToDisplay.map((v) => {
+                  const isCurrent = viewId === v.id;
                   return (
-                    <div key={v.id} className="mb-view" data-on={viewId === v.id}>
-                      <button type="button" onClick={() => { setTab(v.tab); setFilters(v.filters); setViewId(v.id); setPanel(null); }}>{v.name}</button>
-                      <button
-                        type="button"
-                        className="mb-icon"
-                        aria-label={v.pinned ? `Unpin ${v.name}` : `Pin ${v.name}`}
-                        title={v.pinned ? "Unpin filter" : atLimit ? "Maximum 3 pinned filters reached" : "Pin filter to toolbar"}
-                        style={atLimit ? { opacity: 0.45, cursor: "not-allowed" } : undefined}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          togglePinView(v.id);
-                        }}
-                      >
-                        <Pin size={13} style={{ fill: v.pinned ? "var(--accent, #0a84ff)" : "none", color: v.pinned ? "var(--accent, #0a84ff)" : "var(--text-tertiary)" }} />
-                      </button>
-                      <button type="button" className="mb-icon" aria-label={`Delete ${v.name}`} onClick={() => { persistViews(views.filter((x) => x.id !== v.id)); if (viewId === v.id) setViewId(null); }}><Trash2 size={13} /></button>
-                    </div>
+                    <button
+                      key={v.id}
+                      type="button"
+                      className="mb-pinned-pill"
+                      data-on={isCurrent}
+                      title={`Saved pin: ${v.name}`}
+                      onClick={() => {
+                        if (isCurrent) {
+                          setViewId(null);
+                          setTab("all");
+                          setFilters(NO_FILTERS);
+                        } else {
+                          setTab(v.tab);
+                          setFilters(v.filters);
+                          setViewId(v.id);
+                        }
+                      }}
+                    >
+                      <Pin size={11} className="mb-pinned-pin" />
+                      <span>{v.name}</span>
+                    </button>
                   );
                 })}
-                <div className="mb-menu-sep" />
-                {naming ? (
-                  <div style={{ display: "flex", gap: 6, padding: 4 }}>
-                    <input className="mb-input" autoFocus placeholder="Filter name" value={viewName} maxLength={40}
-                      onChange={(e) => setViewName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") saveView(); if (e.key === "Escape") setNaming(false); }} />
-                    <button type="button" className="ps-btn ps-btn--primary ps-btn--sm" disabled={!viewName.trim()} onClick={saveView}>Save</button>
-                  </div>
-                ) : (
-                  <button type="button" disabled={!dirty} onClick={() => setNaming(true)}><Plus size={14} /> Save current filter</button>
-                )}
               </div>
-            )}
-          </div>
+            </div>
+          )}
         </div>
 
         {/* Active filter chips */}
@@ -1560,7 +1488,9 @@ export default function MembersPage() {
                   : "Try a different search, or loosen the filters."}
               </p>
               {tab === "archived" ? null : members.length === 0 ? (
-                <Link href="/dashboard/members/new" className="ps-btn ps-btn--primary ps-btn--sm"><Plus size={15} /> Add member</Link>
+                <button type="button" onClick={() => setIsAddModalOpen(true)} className="ps-btn ps-btn--primary ps-btn--sm">
+                  <Plus size={15} /> Add member
+                </button>
               ) : (
                 <button type="button" className="ps-btn ps-btn--secondary ps-btn--sm" onClick={clearAll}>Clear filters</button>
               )}
@@ -1747,17 +1677,16 @@ export default function MembersPage() {
         onError={(msg) => show(msg, "error")}
       />
 
-      <ImportMembersSheet
-        isOpen={importOpen}
-        orgId={orgId}
-        onClose={() => setImportOpen(false)}
-        onDone={(count) => {
-          setImportOpen(false);
-          show(`Imported ${count} member${count === 1 ? "" : "s"} successfully!`);
+      <CreateMemberModal
+        open={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onCreated={() => {
+          show("Member enrolled successfully!");
           load();
         }}
-        onError={(msg) => show(msg, "error")}
+        orgId={orgId}
       />
+
       {toast}
     </div>
   );
@@ -1771,7 +1700,12 @@ const CSS = `
 .mb-head p { font-size: 13.5px; color: var(--text-secondary); margin: 2px 0 0; }
 .mb-head-actions { display: flex; gap: 8px; }
 .mb-import-btn { display: inline-flex; align-items: center; gap: 6px; }
-.mb-pinned-pills { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.mb-pinned-lane { margin-left: auto; display: flex; align-items: center; justify-content: flex-end; }
+@media (max-width: 768px) {
+  .mb-toolbar { flex-wrap: wrap; }
+  .mb-pinned-lane { width: 100%; justify-content: flex-end; margin-top: 4px; }
+}
+.mb-pinned-pills { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .mb-pinned-pill {
   display: inline-flex;
   align-items: center;
@@ -1821,9 +1755,10 @@ const CSS = `
 
 .mb-card { background: var(--surface, #fff); border: 1px solid var(--mb-line); border-radius: 14px; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
 
-.mb-tabs { display: flex; gap: 8px; padding: 8px 16px; border: none !important; border-bottom: none !important; overflow-x: auto; scrollbar-width: none; background: transparent !important; }
+.mb-tabs-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 14px; border-bottom: 1px solid var(--mb-line); }
+.mb-tabs { display: flex; align-items: center; gap: 6px; padding: 0; border: none !important; border-bottom: none !important; overflow-x: auto; scrollbar-width: none; background: transparent !important; flex: 1 1 auto; min-width: 0; }
 .mb-tabs::-webkit-scrollbar { display: none; }
-.mb-tabs button { display: inline-flex; align-items: center; gap: 8px; height: 40px; padding: 0 10px; border: none !important; border-bottom: none !important; background: transparent !important; font: inherit; font-size: 13.5px; font-weight: 550; color: var(--text-secondary); cursor: pointer; white-space: nowrap; border-radius: 8px !important; box-shadow: none !important; transition: all 150ms ease; }
+.mb-tabs button { display: inline-flex; align-items: center; gap: 8px; height: 38px; padding: 0 10px; border: none !important; border-bottom: none !important; background: transparent !important; font: inherit; font-size: 13.5px; font-weight: 550; color: var(--text-secondary); cursor: pointer; white-space: nowrap; border-radius: 8px !important; box-shadow: none !important; transition: all 150ms ease; }
 .mb-tabs button:hover { color: var(--text-primary); background: var(--mb-soft, rgba(0,0,0,0.03)) !important; }
 .mb-tabs button[aria-selected="true"] { color: var(--text-primary) !important; background: transparent !important; border: none !important; border-bottom: none !important; font-weight: 650; box-shadow: none !important; }
 .mb-count { min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--mb-soft); color: var(--text-tertiary); font-size: 11.5px; font-weight: 600; display: inline-grid; place-items: center; font-variant-numeric: tabular-nums; transition: background 150ms, color 150ms; }
@@ -1848,8 +1783,11 @@ const CSS = `
 .mb-tabs button[data-tone="archived"] .mb-tab-radio-dot { background: #64748b; }
 .dark .mb-tab-radio { border-color: #52525b; }
 
-.mb-toolbar { display: flex; align-items: center; gap: 8px; padding: 12px; flex-wrap: wrap; }
-.mb-search-container { position: relative; flex: 0 1 340px; min-width: 200px; }
+.mb-tabs-tools { display: inline-flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: auto; }
+.mb-pop--right { left: auto !important; right: 0 !important; }
+
+.mb-toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 14px 12px; }
+.mb-search-container { position: relative; flex: 1 1 auto; max-width: 440px; width: 100%; min-width: 200px; }
 .mb-search { position: relative; display: flex; align-items: center; width: 100%; }
 .mb-search > svg { position: absolute; left: 11px; color: var(--text-tertiary); pointer-events: none; }
 .mb-search input { width: 100%; height: 36px; padding: 0 34px 0 34px; border: 1px solid var(--mb-line); border-radius: 9px; background: #fff; font: inherit; font-size: 13.5px; color: var(--text-primary); outline: none; }
@@ -2157,6 +2095,10 @@ const CSS = `
 @media (max-width: 1100px) {
   .mb-tr { grid-template-columns: minmax(180px, 2fr) minmax(150px, 1.5fr) 72px minmax(100px, 1fr) 90px; gap: 12px; }
 }
+@media (max-width: 960px) {
+  .mb-tabs-bar { flex-wrap: wrap; gap: 8px; padding: 8px 12px; }
+  .mb-tabs-tools { width: 100%; justify-content: flex-end; }
+}
 @media (max-width: 760px) {
   .mb-tr { grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; padding: 10px 12px; min-height: 0; }
   .mb-hide-sm, .mb-th { display: none; }
@@ -2164,15 +2106,18 @@ const CSS = `
   .mb-two { grid-template-columns: 1fr; }
   .mb-pop { position: fixed; left: 16px; right: 16px; top: 120px; width: auto; }
 }
+@media (max-width: 540px) {
+  .mb-tabs-tools { width: 100%; }
+  .mb-tabs-tools > .mb-anchor { flex: 1; }
+  .mb-tabs-tools .mb-tool { width: 100%; justify-content: center; padding: 0 6px; font-size: 12px; }
+}
 /* Same gutter as Leads, regardless of any page width cap elsewhere. */
 .ps-page.mb { max-width: none !important; margin: 0 !important; padding: 18px !important; }
 @media (min-width: 1920px) {
   .ps-page.mb { max-width: 1680px !important; margin: 0 auto !important; }
 }
 .mb-head-title { display: flex; align-items: center; gap: 12px; }
-.mb-head-icon { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; color: #fff; background: linear-gradient(135deg, #0a84ff, #5e5ce6); box-shadow: 0 6px 16px rgba(10,132,255,0.28); flex-shrink: 0; }
 .mb-card { position: relative; overflow: visible; }
-.mb-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; border-radius: 14px 14px 0 0; background: linear-gradient(90deg, #0a84ff, #5e5ce6 40%, #af52de 70%, #ff9f0a); }
 .dark .mb { --mb-line: var(--border); --mb-soft: var(--surface-2); }
 .dark .mb-card { background: var(--surface-2); border-color: var(--border); }
 .dark .mb-search input { background: var(--surface-3); border-color: var(--border); color: #fff; }

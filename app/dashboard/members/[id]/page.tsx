@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase";
+import { uploadToCloudflareR2 } from "@/lib/r2-client";
 import { BookOpen, Calendar, Camera, ChevronRight, Copy, Dumbbell, Loader2, LogIn, LogOut, Pencil, Plus, QrCode, RefreshCw, Salad, Search, Wallet, UserCheck, X, Cake } from "lucide-react";
 import {
   Avatar, BackLink, cols, formatDate, formatINR, formatTime, Segmented, Skeleton, useToast,
@@ -829,19 +830,17 @@ export default function MemberProfilePage() {
   async function handlePhotoChange(e: React.ChangeEvent<HTMLInputElement>) {
     if (!member || !e.target.files?.[0]) return;
     const file = e.target.files[0];
-    if (file.size > 2 * 1024 * 1024) { show("Photo must be under 2 MB", "error"); return; }
+    if (file.size > 5 * 1024 * 1024) { show("Photo must be under 5 MB", "error"); return; }
     setPhotoUploading(true);
     try {
-      const ext = file.name.split(".").pop() ?? "jpg";
-      const path = `member-photos/${member.org_id}/${member.id}.${ext}`;
-      const { error: upErr } = await supabase.storage.from("org-assets").upload(path, file, { upsert: true, contentType: file.type });
-      if (upErr) { show("Upload failed: " + upErr.message, "error"); return; }
-      const { data: { publicUrl } } = supabase.storage.from("org-assets").getPublicUrl(path);
-      const url = `${publicUrl}?v=${Date.now()}`;
+      const r2Url = await uploadToCloudflareR2(file, "members");
+      const url = `${r2Url}?v=${Date.now()}`;
       const { error: dbErr } = await supabase.from("members").update({ photo_url: url }).eq("id", member.id);
       if (dbErr) { show("Couldn't save photo", "error"); return; }
       setMember((prev) => (prev ? { ...prev, photo_url: url } : prev));
       show("Photo updated");
+    } catch (err: any) {
+      show(err?.message || "Upload failed", "error");
     } finally {
       setPhotoUploading(false);
       e.target.value = "";
