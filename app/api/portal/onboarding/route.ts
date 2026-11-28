@@ -86,6 +86,7 @@ export async function GET(req: NextRequest) {
       include_goals: true,
       include_diet: true,
       excluded_fields: [],
+      custom_questions: [],
     };
 
     const status = formRecord?.status || (member.onboarding_status || "sent");
@@ -97,6 +98,8 @@ export async function GET(req: NextRequest) {
         formId: formRecord?.id || null,
         token: formRecord?.access_token || member.onboarding_token || member.id,
         status,
+        assigned_trainer: prefilledData.assigned_trainer || "Psync Fitness Staff",
+        assigned_trainer_id: formRecord?.assigned_trainer_id || customConfig.assigned_trainer_id || null,
         member: {
           id: member.id,
           org_id: member.org_id,
@@ -162,38 +165,59 @@ export async function POST(req: NextRequest) {
       phone: member.phone || "",
       email: member.email || "",
       assigned_trainer: "Psync Fitness Trainer",
+      assigned_trainer_id: assigned_trainer_id || null,
     };
 
-    const config = custom_config || {
+    const config = {
       include_personal: true,
       include_health: true,
       include_goals: true,
       include_diet: true,
       excluded_fields: [],
+      custom_questions: [],
+      assigned_trainer_id: assigned_trainer_id || null,
+      ...(custom_config || {}),
     };
 
     let formId = crypto.randomUUID();
     let accessToken = crypto.randomUUID();
 
     try {
+      const insertPayload = {
+        id: formId,
+        org_id: member.org_id,
+        member_id: member.id,
+        created_by: created_by || null,
+        assigned_trainer_id: assigned_trainer_id || null,
+        version: "1.0",
+        custom_config: config,
+        status: "sent",
+        prefilled_data: prefilled,
+        access_token: accessToken,
+      };
+
       const { data: inserted, error: insertErr } = await db
         .from("member_onboarding_forms")
-        .insert({
-          id: formId,
-          org_id: member.org_id,
-          member_id: member.id,
-          created_by: created_by || null,
-          assigned_trainer_id: assigned_trainer_id || null,
-          version: "1.0",
-          custom_config: config,
-          status: "sent",
-          prefilled_data: prefilled,
-          access_token: accessToken,
-        })
+        .insert(insertPayload)
         .select()
         .single();
 
-      if (!insertErr && inserted) {
+      if (insertErr && assigned_trainer_id) {
+        // Fallback without FK on auth.users while keeping trainer id in config and prefilled
+        const { data: insertedFallback } = await db
+          .from("member_onboarding_forms")
+          .insert({
+            ...insertPayload,
+            assigned_trainer_id: null,
+          })
+          .select()
+          .single();
+
+        if (insertedFallback) {
+          formId = insertedFallback.id;
+          accessToken = insertedFallback.access_token;
+        }
+      } else if (!insertErr && inserted) {
         formId = inserted.id;
         accessToken = inserted.access_token;
       }

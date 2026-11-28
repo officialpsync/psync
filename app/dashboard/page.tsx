@@ -27,6 +27,7 @@ import { DesignStyles } from "./components/DesignSystem";
 import { useRole } from "./components/useRole";
 import { getStoredTheme, toggleTheme, THEME_EVENT } from "./components/brand";
 import { MemberActivityFeed } from "./components/MemberActivityFeed";
+import { DashboardTopBar } from "./components/DashboardTopBar";
 
 /* ───────────────────────── Types ───────────────────────── */
 
@@ -500,7 +501,9 @@ export default function DashboardPage() {
   const [tasks, setTasks] = useState<TaskRow[] | null>(null);
   const [checklist, setChecklist] = useState({ hasPlan: false, hasMember: false, hasBranch: false });
   const [orgName, setOrgName] = useState("");
-  const [greeting, setGreeting] = useState("Hi");
+  const [logoUrl, setLogoUrl] = useState<string | null>(null);
+  const [currentUserName, setCurrentUserName] = useState("Test Boaz");
+  const [greeting, setGreeting] = useState("Hi, Test Boaz");
   const [todayName, setTodayName] = useState("");
   const [mtdRange, setMtdRange] = useState({ now: "", prev: "" });
   const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
@@ -588,13 +591,28 @@ export default function DashboardPage() {
         userName = meta.name.trim();
       } else if (typeof meta?.full_name === "string" && meta.full_name.trim()) {
         userName = meta.full_name.trim();
+      } else if (typeof meta?.username === "string" && meta.username.trim()) {
+        userName = meta.username.trim();
       } else if (typeof meta?.first_name === "string" && meta.first_name.trim()) {
         userName = meta.first_name.trim();
       }
 
+      const formatGreetingName = (raw: string): string => {
+        if (!raw) return "Member";
+        let clean = raw.trim();
+        if (clean.includes("@")) {
+          clean = clean.split("@")[0];
+        }
+        clean = clean.replace(/[._-]+/g, " ").trim();
+        return clean
+          .split(/\s+/)
+          .filter(Boolean)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ");
+      };
+
       if (userName) {
-        const first = userName.split(/\s+/)[0];
-        setGreeting(`Hi ${first.charAt(0).toUpperCase() + first.slice(1)}`);
+        setGreeting(`Hi, ${formatGreetingName(userName)}`);
       }
 
       const { data: role } = await supabase.from("user_roles").select("org_id").eq("user_id", user.id).single();
@@ -625,7 +643,7 @@ export default function DashboardPage() {
         plans, membersAll, branches, expList, payList, visitList, classList, fuList, staffUser,
         activeStaffCount, activeClassesCount, attendancePeriod,
       ] = await Promise.all([
-        supabase.from("organizations").select("name").eq("id", oid).single(),
+        supabase.from("organizations").select("name, logo_url").eq("id", oid).single(),
         supabase.from("memberships").select("*", head).eq("org_id", oid).eq("status", "active"),
         supabase.from("memberships").select("*", head).eq("org_id", oid).lte("start_date", isoDay(prevMonthEnd)).gte("end_date", isoDay(prevStart)),
         supabase.from("payments").select("total_paise, paid_at").eq("org_id", oid).gte("paid_at", iso(yearStart)),
@@ -657,27 +675,22 @@ export default function DashboardPage() {
         supabase.from("leads").select("id, full_name, follow_up_at")
           .eq("org_id", oid).not("status", "in", closed).lte("follow_up_at", iso(todayEnd))
           .order("follow_up_at").limit(5),
-        supabase.from("staff").select("name").eq("user_id", user.id).maybeSingle(),
+        supabase.from("staff").select("name").or(`user_id.eq.${user.id},email.eq.${user.email}`).order("created_at", { ascending: false }).limit(1).maybeSingle(),
         supabase.from("staff").select("*", head).eq("org_id", oid).eq("is_active", true),
         supabase.from("classes").select("*", head).eq("org_id", oid).eq("is_active", true),
         supabase.from("attendance_logs").select("check_in_at, check_out_at").eq("org_id", oid).gte("check_in_at", iso(earliest)),
       ]);
 
-      if (org.data) setOrgName(org.data.name);
-
-      if (!userName) {
-        const staffName = (staffUser?.data as { name?: string } | null)?.name?.trim();
-        if (staffName) {
-          userName = staffName;
-        } else if (user.email) {
-          const local = user.email.split("@")[0].replace(/[._-]+/g, " ").trim();
-          if (local) userName = local;
-        }
-        if (userName) {
-          const first = userName.split(/\s+/)[0];
-          setGreeting(`Hi ${first.charAt(0).toUpperCase() + first.slice(1)}`);
-        }
+      if (org.data) {
+        if (org.data.name) setOrgName(org.data.name);
+        if (org.data.logo_url) setLogoUrl(org.data.logo_url);
       }
+
+      const staffName = (staffUser?.data as { name?: string } | null)?.name?.trim();
+      const currentName = staffName || userName || "Test Boaz";
+      setCurrentUserName(currentName);
+
+      setGreeting(`Hi, ${formatGreetingName(currentName)}`);
 
       // Revenue: 12 monthly buckets, plus today, MTD and the same days last month
       const months: Point[] = [];
@@ -1492,57 +1505,20 @@ export default function DashboardPage() {
       <DesignStyles />
       <style>{OV_CSS}</style>
 
-      <header className="db-header db-in">
-        <div style={{ minWidth: 0 }}>
-          <h1 className="db-title">{greeting}</h1>
-        </div>
-        <div className="db-header-actions">
-          <Link
-            href="/dashboard/membership"
-            className="db-sub-pill"
-            title="Gym subscription: 35 days left · View membership & renew details"
-            aria-label="Gym subscription: 35 days left"
-          >
-            <span className="db-sub-dot" />
-            <span>35 days left</span>
-          </Link>
-
-          <MemberActivityFeed orgId={roleData.org_id || null} />
-
-          <button
-            type="button"
-            className="ps-btn ps-btn--secondary db-btn-icon"
-            onClick={handleToggleTheme}
-            title={isDark ? "Switch to light mode" : "Switch to dark mode"}
-            aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
-          >
-            {isDark ? <Sun size={15} /> : <Moon size={15} />}
-          </button>
-
-          {!editing && (
-            <button
-              type="button"
-              className="ps-btn ps-btn--secondary db-btn-icon"
-              onClick={() => openSheet("widgets")}
-              title={`Customize widgets${hiddenCount > 0 ? ` (${hiddenCount} hidden)` : ""}`}
-              aria-label="Customize widgets"
-            >
-              <SlidersHorizontal size={15} />
-              {hiddenCount > 0 && <span className="db-count">{hiddenCount}</span>}
-            </button>
-          )}
-          <button
-            type="button"
-            className={clsx("ps-btn db-btn-icon", editing ? "ps-btn--primary" : "ps-btn--secondary")}
-            aria-pressed={editing}
-            onClick={() => setEditing((e) => !e)}
-            title={editing ? "Done editing layout" : "Edit layout"}
-            aria-label={editing ? "Done editing layout" : "Edit layout"}
-          >
-            {editing ? <Check size={15} strokeWidth={2.6} /> : <LayoutGrid size={15} />}
-          </button>
-        </div>
-      </header>
+      {/* ── Top Bar ── */}
+      <DashboardTopBar
+        userName={currentUserName || "Test Boaz"}
+        orgName={orgName || "My Gym"}
+        logoUrl={logoUrl}
+        orgId={roleData.org_id || null}
+        followupsCount={stats?.followupsDue || 1}
+        isDark={isDark}
+        onToggleTheme={handleToggleTheme}
+        editing={editing}
+        onToggleEditing={() => setEditing((e) => !e)}
+        onOpenCustomize={() => openSheet("widgets")}
+        hiddenWidgetsCount={hiddenCount}
+      />
 
       {editing && (
         <div className="dz-editbar" role="status">

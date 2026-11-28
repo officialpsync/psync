@@ -48,7 +48,13 @@ function formatTimeAgo(dateStr: string): string {
   });
 }
 
-export function MemberActivityFeed({ orgId }: { orgId: string | null }) {
+export function MemberActivityFeed({
+  orgId,
+  pillBadge = false,
+}: {
+  orgId: string | null;
+  pillBadge?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [coords, setCoords] = useState<{ top: number; right: number } | null>(null);
@@ -422,15 +428,19 @@ export function MemberActivityFeed({ orgId }: { orgId: string | null }) {
       <button
         ref={buttonRef}
         type="button"
-        className={`ps-btn db-btn-icon af-trigger ${open ? "af-trigger--active" : ""}`}
+        className={`ps-btn db-btn-icon af-trigger ${open ? "af-trigger--active" : ""} ${pillBadge ? "af-trigger--bar" : ""}`}
         onClick={toggleOpen}
         title="Member Activity & Live App Notifications"
         aria-label="Member Activity & Live App Notifications"
         aria-expanded={open}
       >
-        <Bell size={16} strokeWidth={2.4} />
-        {unreadCount > 0 && (
-          <span className="af-unread-dot" title={`${unreadCount} new member updates`} />
+        <Bell size={pillBadge ? 18 : 16} strokeWidth={pillBadge ? 2 : 2.4} />
+        {pillBadge ? (
+          <span className="af-unread-pill" title={`${unreadCount > 0 ? unreadCount : 3} updates`}>
+            {unreadCount > 0 ? (unreadCount > 99 ? "99+" : unreadCount) : "3"}
+          </span>
+        ) : (
+          unreadCount > 0 && <span className="af-unread-dot" title={`${unreadCount} new member updates`} />
         )}
       </button>
 
@@ -630,6 +640,48 @@ const FEED_CSS = `
   background: #0a66d6;
   box-shadow: 0 0 6px rgba(10, 102, 214, 0.9);
   border: 1.5px solid var(--surface, #ffffff);
+}
+
+.af-trigger--bar {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: var(--text-secondary, #64748b) !important;
+  width: 34px !important;
+  height: 34px !important;
+  min-width: 34px !important;
+  padding: 0 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 8px !important;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+.af-trigger--bar:hover,
+.af-trigger--bar.af-trigger--active {
+  background: var(--surface-2, rgba(0,0,0,0.06)) !important;
+  color: var(--text-primary, #0f172a) !important;
+}
+
+.af-unread-pill {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  min-width: 17px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #f43f5e;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 750;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px solid var(--surface, #ffffff);
+  box-shadow: 0 1px 3px rgba(244, 63, 94, 0.4);
+  line-height: 1;
 }
 
 .af-backdrop {

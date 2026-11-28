@@ -6,8 +6,8 @@ import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  Dumbbell, Plus, Search, Loader2, Users, Copy, Trash2, Layers, Library, CalendarDays, Clock,
-  LayoutGrid, List, ChevronRight, Sparkles, Pencil,
+  Dumbbell, Plus, Search, Loader2, Users, Copy, Trash2, Library, CalendarDays, Clock,
+  LayoutGrid, List, ChevronRight, Pencil, ClipboardList,
 } from "lucide-react"
 import { DesignStyles } from "../components/DesignSystem"
 import { Skeleton } from "../components/ui"
@@ -154,8 +154,6 @@ export default function WorkoutsPage() {
   }, [list, search, goal, level, days, sort])
 
   const onPlan = mine.reduce((s, p) => s + (p.assigned_count ?? 0), 0)
-  const yourTemplates = mine.filter((p) => p.is_template).length
-  const inUse = mine.filter((p) => (p.assigned_count ?? 0) > 0).length
   const anyFilter = goal !== "all" || level !== "all" || days !== "all" || !!search
 
   return (
@@ -167,18 +165,12 @@ export default function WorkoutsPage() {
       <header className="wk-head">
         <div className="wk-title">
           <div>
-            <h1>Workouts</h1>
+            <h1>Exercise plans</h1>
             <p>{loading ? "\u00a0" : `${mine.length} plan${mine.length === 1 ? "" : "s"} · ${onPlan} member${onPlan === 1 ? "" : "s"} training`}</p>
           </div>
         </div>
-        <div className="wk-kpis">
-          <div className="wk-kpi"><span className="wk-kpi-icon wk-tone-purple"><Dumbbell size={15} /></span><div><small>Your plans</small><b>{loading ? "–" : mine.length}</b></div></div>
-          <div className="wk-kpi"><span className="wk-kpi-icon wk-tone-green"><Users size={15} /></span><div><small>Members on a plan</small><b>{loading ? "–" : onPlan}</b></div></div>
-          <div className="wk-kpi"><span className="wk-kpi-icon wk-tone-amber"><Sparkles size={15} /></span><div><small>Plans in use</small><b>{loading ? "–" : inUse}</b></div></div>
-          <div className="wk-kpi"><span className="wk-kpi-icon wk-tone-blue"><Layers size={15} /></span><div><small>Your templates</small><b>{loading ? "–" : yourTemplates}</b></div></div>
-          <div className="wk-kpi"><span className="wk-kpi-icon wk-tone-teal"><Library size={15} /></span><div><small>Built-in</small><b>{loading ? "–" : templates.length}</b></div></div>
-        </div>
         <div className="wk-actions">
+          <Link href="/dashboard/workouts/templates" className="ps-btn ps-btn--secondary"><ClipboardList size={16} /><span>Templates</span></Link>
           <Link href="/dashboard/workouts/exercises" className="ps-btn ps-btn--secondary"><Library size={16} /><span>Exercises</span></Link>
           <Link href="/dashboard/workouts/new" className="ps-btn ps-btn--primary"><Plus size={16} strokeWidth={2.4} /><span>New plan</span></Link>
         </div>

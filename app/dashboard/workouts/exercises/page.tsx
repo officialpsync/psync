@@ -5,8 +5,8 @@
 import { useEffect, useMemo, useState } from "react"
 import type { Equipment } from "@/lib/workout/types"
 import {
-  Plus, Search, Dumbbell, Library, Tag, Tags, Video, Pencil, Copy, Archive, ArchiveRestore, Trash2, Check, Loader2,
-  ImageIcon, LayoutGrid, Rows3, Sparkles,
+  Plus, Search, Dumbbell, Library, Tags, Video, Pencil, Copy, Archive, ArchiveRestore, Trash2, Check, Loader2,
+  ImageIcon, LayoutGrid, Rows3,
 } from "lucide-react"
 import { WorkoutStyles, MUSCLE_COLOR } from "../components/WorkoutTheme"
 import { DesignStyles } from "../../components/DesignSystem"
@@ -331,12 +331,6 @@ export default function ExercisesPage() {
             <h1>Exercises</h1>
             <p>{loading ? "\u00a0" : `${stats.total} in your library · ${stats.mine} made by your gym`}</p>
           </div>
-        </div>
-        <div className="wk-kpis">
-          <div className="wk-kpi"><span className="wk-kpi-icon wk-tone-blue"><Library size={15} /></span><div><small>In library</small><b>{loading ? "–" : stats.total}</b></div></div>
-          <div className="wk-kpi"><span className="wk-kpi-icon wk-tone-purple"><Sparkles size={15} /></span><div><small>Your exercises</small><b>{loading ? "–" : stats.mine}</b></div></div>
-          <div className="wk-kpi"><span className="wk-kpi-icon wk-tone-green"><Tag size={15} /></span><div><small>Categories</small><b>{cats.loaded ? stats.categories : "–"}</b></div></div>
-          <div className="wk-kpi"><span className="wk-kpi-icon wk-tone-amber"><Video size={15} /></span><div><small>With your media</small><b>{loading ? "–" : stats.media}</b></div></div>
         </div>
         <div className="wk-actions">
           <button type="button" className="ps-btn ps-btn--secondary" onClick={() => setCatsOpen(true)}><Tags size={16} /><span>Categories</span></button>

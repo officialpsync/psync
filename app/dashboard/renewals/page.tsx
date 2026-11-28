@@ -5,13 +5,21 @@ import Link from "next/link";
 import {
   RefreshCw, Users, Search, Download, Calendar, Clock,
   MessageSquare, ChevronRight, ArrowUpDown, Check, AlertTriangle,
-  IndianRupee, ArrowLeft, Filter, Phone, CheckCircle2, X, Plus
+  IndianRupee, ArrowLeft, Filter, Phone, CheckCircle2, X, Plus, Loader2
 } from "lucide-react";
 import { createClient } from "@/lib/supabase";
 import { formatINR, Avatar, Skeleton, useToast } from "../components/ui";
 import { RenewalSheet } from "../members/components/RenewalSheet";
 
 const supabase = createClient();
+
+function WhatsAppIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor">
+      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.05 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+    </svg>
+  );
+}
 
 type MemberData = {
   id: string;
@@ -59,6 +67,35 @@ export default function RenewalsPage() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("soonest");
   const [renewTarget, setRenewTarget] = useState<RenewalItem | null>(null);
+  const [changingStatusId, setChangingStatusId] = useState<string | null>(null);
+
+  async function handleQuickStatusChange(item: RenewalItem, newStatus: "active" | "inactive") {
+    setChangingStatusId(item.id);
+    try {
+      if (newStatus === "inactive") {
+        await Promise.all([
+          supabase.from("members").update({ status: "inactive" }).eq("id", item.member_id),
+          supabase.from("memberships").update({ status: "expired" }).eq("id", item.id),
+        ]);
+        show(`${item.member.full_name} marked as Inactive`);
+      } else {
+        const today = new Date();
+        const end = new Date(today);
+        end.setDate(end.getDate() + (item.plan?.duration_days || 30));
+        const iso = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        await Promise.all([
+          supabase.from("members").update({ status: "active" }).eq("id", item.member_id),
+          supabase.from("memberships").update({ status: "active", end_date: iso(end) }).eq("id", item.id),
+        ]);
+        show(`${item.member.full_name} marked as Active`);
+      }
+      await loadData();
+    } catch (err: any) {
+      show("Could not update status: " + (err?.message || "Unknown error"), "error");
+    } finally {
+      setChangingStatusId(null);
+    }
+  }
 
   const loadData = useCallback(async () => {
     try {
@@ -309,11 +346,11 @@ export default function RenewalsPage() {
               <ChevronRight size={13} />
               <Link href="/dashboard/members">Members</Link>
               <ChevronRight size={13} />
-              <span>Renewals</span>
+              <span>Pending Balance & Renewals</span>
             </div>
-            <h1>Member Renewals Tracker</h1>
+            <h1>Member Renewals & Pending Balance</h1>
             <p>
-              Track upcoming membership expirations, forecast upcoming renewal revenue, and follow up with members.
+              Track upcoming membership expirations, pending dues, forecast upcoming renewal revenue, and follow up with members.
             </p>
           </div>
         </div>
@@ -529,7 +566,6 @@ export default function RenewalsPage() {
                 <th>Renewal Amount</th>
                 <th>Expiry Date</th>
                 <th>Status</th>
-                <th>WhatsApp Remind</th>
                 <th style={{ textAlign: "right" }}>Action</th>
               </tr>
             </thead>
@@ -556,13 +592,13 @@ export default function RenewalsPage() {
                       </div>
                     </td>
                     <td>
-                      <Skeleton w={90} h={13} />
+                      <div style={{ display: "grid", gap: 4 }}>
+                        <Skeleton w={90} h={13} />
+                        <Skeleton w={60} h={18} r={4} />
+                      </div>
                     </td>
                     <td>
-                      <Skeleton w={80} h={22} r={11} />
-                    </td>
-                    <td>
-                      <Skeleton w={120} h={28} r={6} />
+                      <Skeleton w={38} h={22} r={11} />
                     </td>
                     <td style={{ textAlign: "right" }}>
                       <Skeleton w={70} h={28} r={6} />
@@ -571,7 +607,7 @@ export default function RenewalsPage() {
                 ))
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={7}>
+                  <td colSpan={6}>
                     <div className="rn-empty">
                       <CheckCircle2 size={38} className="rn-empty-icon" />
                       <h3>No renewal records match</h3>
@@ -600,18 +636,42 @@ export default function RenewalsPage() {
                 filteredRows.map((item) => {
                   const waUrl = getWaLink(item);
                   const isExpired = item.days_left < 0;
-                  const isToday = item.days_left === 0;
+                  const isBusy = changingStatusId === item.id;
+                  const isActive = item.member.status !== "inactive" && item.status === "active";
 
                   return (
                     <tr key={item.id} className={isExpired ? "rn-row--expired" : ""}>
-                      {/* 1. Member */}
+                      {/* 1. Member with WhatsApp logo beside name */}
                       <td>
                         <div className="rn-who">
                           <Avatar name={item.member.full_name} size={34} />
                           <div className="rn-who-meta">
-                            <Link href={`/dashboard/members/${item.member_id}`} className="rn-name-link">
-                              <strong>{item.member.full_name}</strong>
-                            </Link>
+                            <div className="rn-name-row">
+                              <Link href={`/dashboard/members/${item.member_id}`} className="rn-name-link">
+                                <strong>{item.member.full_name}</strong>
+                              </Link>
+                              {waUrl ? (
+                                <a
+                                  href={waUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="rn-wa-icon"
+                                  title={`Send WhatsApp renewal reminder to ${item.member.full_name} (${item.member.phone})`}
+                                  aria-label={`Send WhatsApp reminder to ${item.member.full_name}`}
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <WhatsAppIcon size={13} />
+                                </a>
+                              ) : (
+                                <span
+                                  className="rn-wa-icon rn-wa-icon--disabled"
+                                  title="No phone number for WhatsApp"
+                                  aria-label="No phone number"
+                                >
+                                  <WhatsAppIcon size={13} />
+                                </span>
+                              )}
+                            </div>
                             <small className="rn-phone">
                               {item.member.phone || "No phone"}
                             </small>
@@ -619,15 +679,10 @@ export default function RenewalsPage() {
                         </div>
                       </td>
 
-                      {/* 2. Current Plan */}
+                      {/* 2. Current Plan (without duration days) */}
                       <td>
                         <div className="rn-plan-meta">
                           <span className="rn-plan-name">{item.plan?.name || "Standard Plan"}</span>
-                          {item.plan?.duration_days && (
-                            <small className="rn-plan-duration">
-                              {item.plan.duration_days} days
-                            </small>
-                          )}
                         </div>
                       </td>
 
@@ -647,64 +702,58 @@ export default function RenewalsPage() {
                         </div>
                       </td>
 
-                      {/* 4. Expiry Date */}
+                      {/* 4. Expiry Date & Days Left at bottom (red if < 15 days left) */}
                       <td>
                         <div className="rn-date-block">
-                          <span>
+                          <span className="rn-date-text">
                             {new Date(item.end_date).toLocaleDateString("en-IN", {
                               day: "numeric",
                               month: "short",
                               year: "numeric",
                             })}
                           </span>
+                          <span
+                            className={`rn-exp-badge ${
+                              item.days_left < 15
+                                ? "rn-exp-badge--red"
+                                : "rn-exp-badge--blue"
+                            }`}
+                          >
+                            <Clock size={10} />
+                            <span>
+                              {item.days_left < 0
+                                ? `Expired (${Math.abs(item.days_left)}d ago)`
+                                : item.days_left === 0
+                                ? "Expires Today"
+                                : item.days_left === 1
+                                ? "Tomorrow"
+                                : `${item.days_left}d left`}
+                            </span>
+                          </span>
                         </div>
                       </td>
 
-                      {/* 5. Status Pill */}
+                      {/* 5. Status Toggle (Active / Inactive, no text) */}
                       <td>
-                        <span
-                          className={`rn-pill ${
-                            isExpired
-                              ? "rn-pill--red"
-                              : isToday
-                              ? "rn-pill--urgent"
-                              : item.days_left <= 7
-                              ? "rn-pill--amber"
-                              : "rn-pill--blue"
-                          }`}
-                        >
-                          <Clock size={11} />
-                          <span>
-                            {isExpired
-                              ? `Expired (${Math.abs(item.days_left)}d ago)`
-                              : isToday
-                              ? "Expires Today"
-                              : item.days_left === 1
-                              ? "Tomorrow"
-                              : `${item.days_left}d left`}
-                          </span>
-                        </span>
-                      </td>
-
-                      {/* 6. WhatsApp Remind */}
-                      <td>
-                        {waUrl ? (
-                          <a
-                            href={waUrl}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="rn-wa-btn"
-                            title={`Send WhatsApp renewal reminder to ${item.member.full_name}`}
+                        <div className="rn-status-cell">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={isActive}
+                            disabled={isBusy}
+                            className={`rn-toggle ${isActive ? "rn-toggle--on" : "rn-toggle--off"}`}
+                            onClick={() => handleQuickStatusChange(item, isActive ? "inactive" : "active")}
+                            title={`Status: ${isActive ? "Active" : "Inactive"}. Click to toggle.`}
+                            aria-label={`Toggle active status for ${item.member.full_name}`}
                           >
-                            <MessageSquare size={13} />
-                            <span>Remind on WhatsApp</span>
-                          </a>
-                        ) : (
-                          <span className="rn-muted">—</span>
-                        )}
+                            <span className="rn-toggle-thumb">
+                              {isBusy && <Loader2 size={9} className="ps-spin" />}
+                            </span>
+                          </button>
+                        </div>
                       </td>
 
-                      {/* 7. Action */}
+                      {/* 6. Action */}
                       <td style={{ textAlign: "right" }}>
                         <button
                           type="button"
@@ -1027,6 +1076,11 @@ const CSS = `
   flex-direction: column;
   gap: 2px;
 }
+.rn-name-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
 .rn-name-link {
   color: var(--text-primary);
   text-decoration: none;
@@ -1036,6 +1090,30 @@ const CSS = `
 .rn-name-link:hover {
   color: var(--accent, #0a84ff);
   text-decoration: underline;
+}
+.rn-wa-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(37, 211, 102, 0.12);
+  color: #128c7e;
+  transition: all 140ms ease;
+  flex-shrink: 0;
+  text-decoration: none;
+}
+.rn-wa-icon:hover {
+  background: #25d366;
+  color: #ffffff;
+  transform: scale(1.08);
+}
+.rn-wa-icon--disabled {
+  opacity: 0.35;
+  background: var(--mb-soft, #f1f5f9);
+  color: var(--text-tertiary);
+  cursor: not-allowed;
 }
 .rn-phone {
   font-size: 11.5px;
@@ -1049,10 +1127,6 @@ const CSS = `
 .rn-plan-name {
   font-weight: 600;
   font-size: 13px;
-}
-.rn-plan-duration {
-  font-size: 11px;
-  color: var(--text-tertiary);
 }
 .rn-price-block {
   display: flex;
@@ -1074,9 +1148,80 @@ const CSS = `
   color: var(--text-tertiary);
 }
 .rn-date-block {
-  font-size: 12.5px;
-  font-weight: 550;
-  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.rn-date-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.rn-exp-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 650;
+  width: fit-content;
+}
+.rn-exp-badge--red {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+.rn-exp-badge--blue {
+  background: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid rgba(3, 105, 161, 0.2);
+}
+
+/* Status cell toggle switch */
+.rn-status-cell {
+  display: inline-flex;
+  align-items: center;
+}
+.rn-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  border: none;
+  padding: 2px;
+  cursor: pointer;
+  background: #d1d5db;
+  transition: background-color 180ms ease, opacity 150ms ease;
+  flex-shrink: 0;
+  outline: none;
+}
+.rn-toggle:hover:not(:disabled) {
+  filter: brightness(0.96);
+}
+.rn-toggle:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.rn-toggle--on {
+  background: #16a34a;
+}
+.rn-toggle-thumb {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: transform 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  transform: translateX(0);
+}
+.rn-toggle--on .rn-toggle-thumb {
+  transform: translateX(16px);
 }
 
 /* Pills */
@@ -1202,6 +1347,26 @@ const CSS = `
 }
 .dark .rn-table tbody tr:hover {
   background: var(--surface-3);
+}
+.dark .rn-wa-icon {
+  background: rgba(37, 211, 102, 0.2);
+  color: #25d366;
+}
+.dark .rn-exp-badge--red {
+  background: rgba(239, 68, 68, 0.18);
+  color: #fca5a5;
+  border-color: rgba(239, 68, 68, 0.3);
+}
+.dark .rn-exp-badge--blue {
+  background: rgba(14, 165, 233, 0.18);
+  color: #7dd3fc;
+  border-color: rgba(14, 165, 233, 0.3);
+}
+.dark .rn-toggle--off {
+  background: #3f3f46;
+}
+.dark .rn-toggle--on {
+  background: #16a34a;
 }
 .dark .rn-wa-btn {
   background: rgba(37, 211, 102, 0.15);

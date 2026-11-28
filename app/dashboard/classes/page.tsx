@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase";
 import {
   ChevronLeft,
@@ -14,6 +15,7 @@ import {
   Trash2,
   CalendarDays,
   Search,
+  Ticket,
 } from "lucide-react";
 import { Avatar, formatDate, Segmented, Skeleton, useToast } from "../components/ui";
 import { DesignStyles } from "../components/DesignSystem";
@@ -1309,15 +1311,20 @@ export default function ClassesPage() {
       <header className="cl-head">
         <div className="cl-title">
           <div>
-            <h1>Classes</h1>
+            <h1>Classes Calendar</h1>
             <p>{loading ? "\u00a0" : `${classes.length} active class${classes.length === 1 ? "" : "es"} · ${titleLabel}`}</p>
           </div>
         </div>
-        {orgId && (
-          <button type="button" className="ps-btn ps-btn--primary cl-new" onClick={() => setCreateOpen(true)}>
-            <Plus size={16} strokeWidth={2.4} /> <span>New class</span>
-          </button>
-        )}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <Link href="/dashboard/classes/bookings" className="ps-btn ps-btn--secondary">
+            <Ticket size={16} /> <span>Active bookings</span>
+          </Link>
+          {orgId && (
+            <button type="button" className="ps-btn ps-btn--primary cl-new" onClick={() => setCreateOpen(true)}>
+              <Plus size={16} strokeWidth={2.4} /> <span>New class</span>
+            </button>
+          )}
+        </div>
       </header>
 
       {/* Google Calendar Card */}
